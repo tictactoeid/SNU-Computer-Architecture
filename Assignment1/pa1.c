@@ -20,20 +20,10 @@
 typedef unsigned char u8;
 /* TODO: Implement this function */
 void write_a_bit(u8* dst, u8 value, int idx) {
-    /*
-    *(dst + idx / BITS_PER_UNIT) &= ~(1<<(idx%BITS_PER_UNIT));
-    *(dst + idx / BITS_PER_UNIT) |= (value <<(idx%BITS_PER_UNIT));
-     * */
-
     // dst: start pointer
     // idx: index of bit
     int bit_size = sizeof(u8)*8;
     if (value != 0 && value != 1) return;
-    /*
-    *(dst + idx/bit_size) &= ~(1 << (bit_size - (idx % bit_size)));
-    *(dst + idx/bit_size) |= value << (bit_size - (idx % bit_size));
-    */
-
     if (value == 0) {
         *(dst + idx/bit_size) &= ~(1 << (bit_size-1 - (idx % bit_size)));
         // example
@@ -66,24 +56,6 @@ int get_a_bit (int value, int dgt) {
 }
 
 int encode(const u8* src, int width, int height, u8* result) {
-    /*
-    for (int k=0; k<8; k++) { // base
-        write_a_bit(result, get_a_bit( 9, 7-k), k);
-    }
-    return 8;
-
-
-    write_a_bit(result, 1, 0);
-    write_a_bit(result, 1, 1);
-    write_a_bit(result, 1, 2);
-    write_a_bit(result, 1, 3);
-    write_a_bit(result, 1, 4);
-    write_a_bit(result, 1, 5);
-    write_a_bit(result, 1, 6);
-    write_a_bit(result, 1, 7);
-    return 8;
-    */
-
 
     int idx = 0;
     if (width==0 || height==0) {
