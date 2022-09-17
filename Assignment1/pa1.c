@@ -18,18 +18,26 @@
 //---------------------------------------------------------------
 
 typedef unsigned char u8;
-
 /* TODO: Implement this function */
 void write_a_bit(u8* dst, u8 value, int idx) {
+    /*
+    *(dst + idx / BITS_PER_UNIT) &= ~(1<<(idx%BITS_PER_UNIT));
+    *(dst + idx / BITS_PER_UNIT) |= (value <<(idx%BITS_PER_UNIT));
+     * */
+
     // dst: start pointer
     // idx: index of bit
-    int bit_size = sizeof(u8);
+    int bit_size = sizeof(u8)*8;
     if (value != 0 && value != 1) return;
+    /*
+    *(dst + idx/bit_size) &= ~(1 << (bit_size - (idx % bit_size)));
+    *(dst + idx/bit_size) |= value << (bit_size - (idx % bit_size));
+    */
 
     if (value == 0) {
-        *(dst + idx/bit_size) &= 1 << ~(bit_size - (idx % bit_size));
+        *(dst + idx/bit_size) &= ~(1 << (bit_size-1 - (idx % bit_size)));
         // example
-        // 1 to 0, idx = 5
+        // 1 to 0, idx = 4
         // 0111 1111 -> 0111 0111
         // 0111 1111 AND 1111 0111 (mask)
         // 0111 1111 AND (NOT 0000 1000)
@@ -37,7 +45,7 @@ void write_a_bit(u8* dst, u8 value, int idx) {
         // 0111 1111 AND (NOT 1<<8-idx)
     }
     else {
-        *(dst + idx/bit_size) |= 1 << (bit_size - (idx % bit_size));
+        *(dst + idx/bit_size) |= 1 << (bit_size-1 - (idx % bit_size));
         // 0 to 1, idx = 5
         // 0111 0111 -> 0111 1111
         // 0111 0111 OR 0000 1000 (mask)
@@ -46,17 +54,38 @@ void write_a_bit(u8* dst, u8 value, int idx) {
     }
 }
 
-u8 get_a_bit (u8 value, int idx) {
-    int bit_size = sizeof(u8);
-    return value >> (bit_size - idx) & 1;
+int get_a_bit (int value, int dgt) {
+    return (value & (1 << dgt)) >> dgt;
     // example
-    // 1000 1111 -> "1" (idx 5)
-    // 1000 1111 >> 3 AND 1
-    // 0001 0001 AND 1
+    // 1000 1111 -> "1" (dgt 3)
+    // 1000 1111 AND 0000 0001<<3
+    // 1000 1111 AND 0000 1000
+    // 0000 1000
+    // 0000 1000 >> 3
     // 1
-
 }
+
 int encode(const u8* src, int width, int height, u8* result) {
+    /*
+    for (int k=0; k<8; k++) { // base
+        write_a_bit(result, get_a_bit( 9, 7-k), k);
+    }
+    return 8;
+
+
+    write_a_bit(result, 1, 0);
+    write_a_bit(result, 1, 1);
+    write_a_bit(result, 1, 2);
+    write_a_bit(result, 1, 3);
+    write_a_bit(result, 1, 4);
+    write_a_bit(result, 1, 5);
+    write_a_bit(result, 1, 6);
+    write_a_bit(result, 1, 7);
+    return 8;
+    */
+
+
+    int idx = 0;
     if (width==0 || height==0) {
         return 0;
     }
@@ -103,6 +132,11 @@ int encode(const u8* src, int width, int height, u8* result) {
             }
 
             // 3. calculate the base and max_delta
+            if (j==0) {
+                base = filter;
+                max_filter = filter;
+            }
+
             if (base > filter) base = filter;
             if (max_filter < filter) max_filter = filter;
         }
@@ -120,19 +154,19 @@ int encode(const u8* src, int width, int height, u8* result) {
         else n=8;
 
         // 5. encode the row
-        int idx = 0;
-        for (int k=idx; k<idx+8; k++) { // base
-            write_a_bit(result, get_a_bit(base, k), k);
+
+        for (int k=0; k<8; k++) { // base
+            write_a_bit(result, get_a_bit(base, 7-k), idx+k);
         }
         idx += 8;
-        for (int k=idx; k<idx+4; k++) { // base
-            write_a_bit(result, get_a_bit(n, k), k);
+        for (int k=0; k<4; k++) { // base
+            write_a_bit(result, get_a_bit(n, 3-k), idx+k);
         }
         idx += 4;
 
         int delta = 0;
         for (int j=0; j<width; j++) {
-            for (int k=idx; k<idx+n; k++) {
+            for (int k=0; k<n; k++) {
                 locate = i*width + j; // calculate delta again
                 cnt = 0;
                 sum = 0;
@@ -162,20 +196,19 @@ int encode(const u8* src, int width, int height, u8* result) {
                     filter = *(src+locate) + 256 - avg;
                 }
                 delta = filter - base;
-                write_a_bit(result, get_a_bit(delta, k), k);
+                write_a_bit(result, get_a_bit(delta, n-1-k), idx+k);
             }
             idx += n;
         }
 
     }
+    // 6. padding
+    if (idx%8==0) return idx/8;
+    for (int i=0; i<8-idx%8; i++){
+        write_a_bit(result, 0, idx+i);
+    }
+    return idx/8+1;
 
-
-
-
-
-
-
-  return 0;
 }
 
 
