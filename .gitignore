@@ -50,3 +50,9 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+*.xml
+*.iml
+Assignment2/cmake-build-debug/
+Assignment1/.idea/
+Assignment2/.idea/
+Assignment1/.idea/workspace.xml
