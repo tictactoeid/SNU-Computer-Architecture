@@ -58,29 +58,30 @@ extern SFP16 fpadd(SFP16 x, SFP16 y);
 
 SFP16 check(SFP16 a)
 {
-  SFP16 b = a & 0x7fff;
+    SFP16 b = a & 0x7fff;
 
-  /* We do not distinguish +0 and -0 */
-  if (b == 0)
-    return 0;
-  
-  /* We do not distinguish +NaN and -NaN */
-  if (b == (SFP16) 0x7f01)
-    return NAN;
+    /* We do not distinguish +0 and -0 */
+    if (b == 0)
+        return 0;
 
-  return a;
+    /* We do not distinguish +NaN and -NaN */
+    if (b == (SFP16) 0x7f01)
+        return NAN;
+
+    return a;
 }
 
 int main(void) {
-  int i, j;
+    int i, j;
 
-  for (i = 0; i < sizeof(tc_x) / sizeof(SFP16 *); i++) {
-    printf("%s", tc_msg[i]);
-    for (j = 0; j < N; j++) {
-      printf("test %d: %s\n", j,
-             (check(fpadd(tc_x[i][j], tc_y[i][j])) == check(tc_ans[i][j]))?
-             "Correct" : "Wrong");
+    for (i = 0; i < sizeof(tc_x) / sizeof(SFP16 *); i++) {
+        printf("%s", tc_msg[i]);
+        for (j = 0; j < N; j++) {
+            printf("test %d: %s\n", j,
+                   (check(fpadd(tc_x[i][j], tc_y[i][j])) == check(tc_ans[i][j]))?
+                   "Correct" : "Wrong");
+        }
     }
-  }
-  return 0;
+    return 0;
 }
+
