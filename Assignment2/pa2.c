@@ -31,17 +31,17 @@ SFP16 write_a_bit(SFP16 bits, short value, short idx) { // ok
     if (idx<0 || idx>=bit_size) return bits;
 
     if (value == 0) {
-        return bits & ~(1 << idx);
+        return bits & ~((unsigned short) 1 << idx);
     }
     else {
-        return bits | (1 << idx);
+        return bits | ((unsigned short) 1 << idx);
     }
 }
 
 SFP16 get_a_bit (SFP16 value, short idx) { // ok
     if (idx<0 || idx>=16) return 0;
     // 15 14 13 12 11 10 9  8  7  6  5  4  3  2  1  0
-    return (value & (1 << idx)) >> idx;
+    return (value & ((unsigned short) 1 << idx)) >> idx;
 }
 
 /* short get_a_bit (short value, short dgt) {
@@ -54,11 +54,11 @@ SFP16 get_a_bit (SFP16 value, short idx) { // ok
 // S  E  E  E  E  E  E  E  F  F  F  F  F  F  F  F
 
 unsigned short get_fraction(SFP16 value) { // ok
-    return (value & 255);
+    return ((unsigned short) value & 255);
 }
 
 unsigned short get_unsigned_exponent(SFP16 value) { // ok
-    return ((value & (127 << 8)) >> 8);
+    return ((value & ((unsigned short) 127 << 8)) >> 8);
 }
 
 short unsigned_exp_to_signed(unsigned short e) {
@@ -72,7 +72,7 @@ signed short get_signed_exponent(SFP16 value) {
 }
 
 unsigned short get_sign(SFP16 value) { // ok
-    return (value & (1 << 15)) >> 15;
+    return (value & ((unsigned short) 1 << 15)) >> 15;
 }
 
 short check_NaN_or_not(SFP16 value) {
