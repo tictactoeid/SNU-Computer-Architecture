@@ -104,6 +104,14 @@ short compare(SFP16 x, SFP16 y) {
         // sign = 1 is smaller than sign = 0
     }
 
+    if (get_sign(x) == 1 && get_sign(y) == 1) {
+        if (get_unsigned_exponent(y) != get_unsigned_exponent(x)){
+            return get_unsigned_exponent(y) - get_unsigned_exponent(x);
+        }
+
+        return get_fraction(x) - get_fraction(y);
+    }
+
     if (get_unsigned_exponent(x) != get_unsigned_exponent(y)){
         return get_unsigned_exponent(x) - get_unsigned_exponent(y);
     }
@@ -112,6 +120,7 @@ short compare(SFP16 x, SFP16 y) {
 }
 
 short compare_abs(SFP16 x, SFP16 y) {
+
     if (get_sign(x) == 0 && get_sign(y) == 0) return compare(x, y);
     if (get_sign(x) == 1 && get_sign(y) == 1) return compare(y, x);
     if (get_unsigned_exponent(x) != get_unsigned_exponent(y)) {
@@ -200,138 +209,148 @@ short normalize(SFP16 *M, short E) {
 }
 
 SFP16 fpadd(SFP16 x, SFP16 y) {
-  /* TODO */
+    /* TODO */
 
-  // check for special values
-  if (check_NaN_or_not(x) == 1 || check_NaN_or_not(y) == 1) return 0x7f01; // x or y is NaN
-  if (check_inf_or_not(x)!=0 || check_inf_or_not(y)!=0) {
-      switch (check_inf_or_not(x)) {
-          case 1:
-              switch (check_inf_or_not(y)) {
-                  case -1:
-                      return 0x7f01;
-                  case 0:
-                      return x;
-                  case 1:
-                      return x;
-              }
-          case 0:
-              switch (check_inf_or_not(y)) {
-                  case -1:
-                      return y;
-                  case 0:
-                      break;
-                  case 1:
-                      return y;
-              }
-          case -1:
-              switch (check_inf_or_not(y)) {
-                  case -1:
-                      return x;
-                  case 0:
-                      return x;
-                  case 1:
-                      return 0x7f01;
-              }
-      }
-  }
+    // check for special values
+    if (check_NaN_or_not(x) == 1 || check_NaN_or_not(y) == 1) return 0x7f01; // x or y is NaN
+    if (check_inf_or_not(x)!=0 || check_inf_or_not(y)!=0) {
+        switch (check_inf_or_not(x)) {
+            case 1:
+                switch (check_inf_or_not(y)) {
+                    case -1:
+                        return 0x7f01;
+                    case 0:
+                        return x;
+                    case 1:
+                        return x;
+                }
+            case 0:
+                switch (check_inf_or_not(y)) {
+                    case -1:
+                        return y;
+                    case 0:
+                        break;
+                    case 1:
+                        return y;
+                }
+            case -1:
+                switch (check_inf_or_not(y)) {
+                    case -1:
+                        return x;
+                    case 0:
+                        return x;
+                    case 1:
+                        return 0x7f01;
+                }
+        }
+    }
 
 
-  // step 1
-  if (compare_abs(x, y) < 0) {
-      return fpadd(y, x);
-  }
+    // step 1
+    if (compare_abs(x, y) < 0) {
+        return fpadd(y, x);
+    }
 
-  // step 2
+    if (get_signed_exponent(x) - get_signed_exponent(y) > 15) return x;
+
+    // step 2
     // ok (for normalized)
-  unsigned short Mx = 0 | (get_fraction(x) << 3);
-  unsigned short My = 0 | (get_fraction(y) << 3);
-  if (get_unsigned_exponent(x) != 0)  Mx = write_a_bit(Mx, 1, 11);
-  if (get_unsigned_exponent(y) != 0) My = write_a_bit(My, 1, 11);
-  // TODO: consider denormalized values
-  // extended to 16 bits
-  // 1.FFFFFFFF => ----1FFF FFFFFGRS : -'s are wasted bits, initially 0
+    unsigned short Mx = 0 | (get_fraction(x) << 3);
+    unsigned short My = 0 | (get_fraction(y) << 3);
+    if (get_unsigned_exponent(x) != 0)  Mx = write_a_bit(Mx, 1, 11);
+    if (get_unsigned_exponent(y) != 0) My = write_a_bit(My, 1, 11);
+    // TODO: consider denormalized values
+    // extended to 16 bits
+    // 1.FFFFFFFF => ----1FFF FFFFFGRS : -'s are wasted bits, initially 0
 
-  short d = get_signed_exponent(x) - get_signed_exponent(y);
-  My = shift_right_M(My, d);
+    short d = get_signed_exponent(x) - get_signed_exponent(y);
+    My = shift_right_M(My, d);
 
-  // step 3
-  unsigned short M = 0;
-  short E = get_signed_exponent(x);
-  if (get_sign(x) == get_sign(y)) M = Mx+My;
-  else M = Mx-My;
+    // step 3
+    unsigned short M = 0;
+    short E = get_signed_exponent(x);
+    if (get_sign(x) == get_sign(y)) M = Mx+My;
+    else M = Mx-My;
 
-  // step 4
-  E = normalize(&M, E);
+    // step 4
+    E = normalize(&M, E);
 
-  // step 5
-  short L_adjusted, R_adjusted, S_adjusted;
-  L_adjusted = get_a_bit(M, 3);
-  R_adjusted = get_a_bit(M, 2);
-  S_adjusted = (get_a_bit(M, 1)==0 && get_a_bit(M, 0)==0) ? 0 : 1;
+    // step 5
+    short L_adjusted, R_adjusted, S_adjusted;
+    L_adjusted = get_a_bit(M, 3);
+    R_adjusted = get_a_bit(M, 2);
+    S_adjusted = (get_a_bit(M, 1)==0 && get_a_bit(M, 0)==0) ? 0 : 1;
 
 
-  M = M>>3; // truncate old GRS
-  if (R_adjusted==1 && S_adjusted == 1) {
-      M++; // round up;
-  }
-  else if (L_adjusted==1 && R_adjusted==1 && S_adjusted==0) {
-      M++; // round up;
-  }
+    M = M>>3; // truncate old GRS
+    if (R_adjusted==1 && S_adjusted == 1) {
+        M++; // round up;
+    }
+    else if (L_adjusted==1 && R_adjusted==1 && S_adjusted==0) {
+        M++; // round up;
+    }
 
-  // -------1 FFFFFFFF
-
+    // -------1 FFFFFFFF
     if (E == 64) {
-        if (M == 0x0000 && get_sign(x) == 0) {
+        if (get_sign(x) == 0) return 0x7F00; // +inf
+        return 0xFF00; // -inf
+    }
+
+    /*if (E == 64) {
+        if (M == 0x0100 && get_sign(x) == 0) {
             return 0x7F00; // +inf
         }
-        else if (M == 0x0000 && get_sign(x) == 1) {
+        else if (M == 0x0100 && get_sign(x) == 1) {
             return 0xFF00; // -inf
         }
         else return 0xFF01; // NaN
+    } */
+
+    // step 6
+    // E += normalize(&M);
+
+    if (get_a_bit(M, 9) == 1) { // re-normalize
+        // cannot use normalize() because now there are no GRS bits in M
+        M = M >> 1; // normalize 10.xxx => 1.0xx
+        E++;
+        // TODO: result becomes special value?
     }
 
-  // step 6
-  // E += normalize(&M);
+    // there's no round-"up" twice
+    // 1.xxx0 -> round-up -> 1.xxx1 (no re-normalization)
+    // 1.xxx1 -> round-up -> may be 10.xx0 -> 1.0xx / 0 discards (round-down)
 
-  if (get_a_bit(M, 9) == 1) { // re-normalize
-      // cannot use normalize() because now there are no GRS bits in M
-      M = M >> 1; // normalize 10.xxx => 1.0xx
-      E++;
-      // TODO: result becomes special value?
-  }
+    // step 7
+    if (E == 64) {
+        if (get_sign(x) == 0) return 0x7F00; // +inf
+        return 0xFF00; // -inf
+    }
+    /* if (E == 64) {
+        if (M == 0x0100 && get_sign(x) == 0) {
+            return 0x7F00; // +inf
+        }
+        else if (M == 0x0100 && get_sign(x) == 1) {
+            return 0xFF00; // -inf
+        }
+        else return 0xFF01; // NaN
+    } */
 
-  // there's no round-"up" twice
-  // 1.xxx0 -> round-up -> 1.xxx1 (no re-normalization)
-  // 1.xxx1 -> round-up -> may be 10.xx0 -> 1.0xx / 0 discards (round-down)
+    SFP16 res = 0;
+    res = write_a_bit(res, get_sign(x), 15);  // Sign == sign(x)
 
-  // step 7
-  if (E == 64) {
-      if (M == 0x0000 && get_sign(x) == 0) {
-          return 0x7F00; // +inf
-      }
-      else if (M == 0x0000 && get_sign(x) == 1) {
-          return 0xFF00; // -inf
-      }
-      else return 0xFF01; // NaN
-  }
-
-  SFP16 res = 0;
-  res = write_a_bit(res, get_sign(x), 15);  // Sign == sign(x)
-
-  for (short i=0; i<7; i++) {
-      if (M >= 0x0100) { // M = -------- FFFFFFFF, M has leading 1, normalized form
-          res = write_a_bit(res, get_a_bit((SFP16) (E+bias), i), i+8);
-      }
-      else { // denormalized form
-          res = write_a_bit(res, get_a_bit(0, i), i+8);
-      }
-      // TODO: how can I know if the result is normalized or denormalized?  ==>  M has leading 1 or not
-  }
-  for (short i=0; i<8; i++) {
-      res = write_a_bit(res, get_a_bit(M, i), i);
-  }
+    for (short i=0; i<7; i++) {
+        if (M >= 0x0100) { // M = -------- FFFFFFFF, M has leading 1, normalized form
+            res = write_a_bit(res, get_a_bit((SFP16) (E+bias), i), i+8);
+        }
+        else { // denormalized form
+            res = write_a_bit(res, get_a_bit(0, i), i+8);
+        }
+        // TODO: how can I know if the result is normalized or denormalized?  ==>  M has leading 1 or not
+    }
+    for (short i=0; i<8; i++) {
+        res = write_a_bit(res, get_a_bit(M, i), i);
+    }
 
 
-  return res;
+    return res;
 }

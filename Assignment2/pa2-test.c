@@ -46,15 +46,21 @@ SFP16 test4_x[N] =  {0x7f00, 0x7f00, 0x7f00,    NAN};
 SFP16 test4_y[N] =  {   NAN, 0xff00, 0x0030, 0x0001};
 SFP16 ans4[N] =     {   NAN,    NAN, 0x7f00,    NAN};
 
-SFP16 *tc_x[] =     { test1_x, test2_x, test3_x, test4_x };
-SFP16 *tc_y[] =     { test1_y, test2_y, test3_y, test4_y };
-SFP16 *tc_ans[] =   {    ans1,    ans2,    ans3,    ans4 };
+SFP16 testcustom_x[N] = {0x7e80, 0x7ec0, 0x71a0, 0xfe80};
+SFP16 testcustom_y[N] = {0x7cfe, 0x7bfa, 0x1eff, 0xfcfe};
+SFP16 anscustom[N] = {0x7f00, 0x7eff, 0x71a0, 0xff00};
+
+SFP16 *tc_x[] =     { test1_x, test2_x, test3_x, test4_x, testcustom_x };
+SFP16 *tc_y[] =     { test1_y, test2_y, test3_y, test4_y, testcustom_y };
+SFP16 *tc_ans[] =   {    ans1,    ans2,    ans3,    ans4, anscustom };
 char *tc_msg[] =    { "-------- NORM + NORM --------\n",
                       "-------- NORM + DENORM ------\n",
                       "------ DENORM + DENORM ------\n",
-                      "--------- INF / NAN ---------\n", };
+                      "--------- INF / NAN ---------\n",
+                      "----- CUSTOM TEST CASES -----\n", };
 
 extern SFP16 fpadd(SFP16 x, SFP16 y);
+extern short compare_abs(SFP16 x, SFP16 y);
 
 SFP16 check(SFP16 a)
 {
@@ -73,6 +79,8 @@ SFP16 check(SFP16 a)
 
 int main(void) {
     int i, j;
+    //printf("%d\n", compare_abs(0xfe80, 0xfcfe));
+    //printf("%d\n", fpadd(0xfe80, 0xfcfe));
 
     for (i = 0; i < sizeof(tc_x) / sizeof(SFP16 *); i++) {
         printf("%s", tc_msg[i]);
