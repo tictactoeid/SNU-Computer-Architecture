@@ -37,6 +37,8 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
             sum_g = 0;
             sum_r = 0;
 
+            // b g r 세트 말고, 하나씩 따로 움직이도록 바꿀것
+
             // locate = i*scaling_factor*w_resized + j*scaling_factor; // start address of the original large pixels
             // i=0, j=0
             // m = 0, 1
@@ -49,21 +51,24 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
                 for (int n=j*scaling_factor; n<(j+3)*scaling_factor; n=n+3) {
 
                     locate = m*w_bytes + n;
+
+                    // real_locate = 
+
                     sum_b += *(imgptr + locate);
                     sum_g += *(imgptr + locate+1);
                     sum_r += *(imgptr + locate+2);
-                    printf("%d %d %d\n", m, n, locate);
-                    printf("value: %d %d %d\n", *(imgptr + locate), *(imgptr + locate+1), *(imgptr + locate+2));
+                    // printf("%d %d %d\n", m, n, locate);
+                    // printf("value: %d %d %d\n", *(imgptr + locate), *(imgptr + locate+1), *(imgptr + locate+2));
                 }
-                printf("\n");
+                // printf("\n");
             }
-            printf("sum: %d %d %d\n", sum_b, sum_g, sum_r);
+            // printf("sum: %d %d %d\n", sum_b, sum_g, sum_r);
             avg_b = sum_b / (scaling_factor*scaling_factor);
             avg_g = sum_g / (scaling_factor*scaling_factor);
             avg_r = sum_r / (scaling_factor*scaling_factor);
             locate_out = i*w_bytes_resized + j;
-            printf("avg: %d %d %d i: %d j: %d\n", avg_b, avg_g, avg_r, i, j);
-            printf("write at %d\n\n",locate_out);
+            // printf("avg: %d %d %d i: %d j: %d\n", avg_b, avg_g, avg_r, i, j);
+            // printf("write at %d\n\n",locate_out);
             for (short idx=7; idx>=0; idx--) {
                 // TODO: Logic is fine but some bug in writing ?
                 write_a_bit(outptr + locate_out, get_a_bit(avg_b, idx), idx);
