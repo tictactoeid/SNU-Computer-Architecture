@@ -38,13 +38,15 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
     int locate_out = 0;
     for (int i=0; i<h_resized; i++) {
         for (int j=0; j<w_resized*3; j=j+3) { // j = j+3
-            for (int k=0; k<3; k++) {
+            for (int x=0; x<3; x++) {
+                // TODO: do not use k
+
                 avg = 0;
                 for (int m = i * scaling_factor; m < (i + 1) * scaling_factor; m++) {
                     for (int n = j * scaling_factor; n < (j+3) * scaling_factor; n+=3) { // n = n+3
-                        locate = m * w_bytes + n+k;
+                        locate = m * w_bytes + n+x;
                         avg += *(imgptr + locate);
-                        printf("value: %d, pixel: %d %d, color: %d, address: %d\n", *(imgptr + locate), m, n/3, k,
+                        printf("value: %d, pixel: %d %d, color: %d, address: %d\n", *(imgptr + locate), m, n/3, x,
                                locate);
                     }
                 }
@@ -52,9 +54,9 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
 
                 printf("sum: %d, ", avg);
                 avg /= (scaling_factor * scaling_factor);
-                locate_out = i * w_bytes_resized + (j+k);
+                locate_out = i * w_bytes_resized + (j+x);
                 printf("avg: %d\n", avg);
-                printf("write at pixel: %d %d, color: %d, address: %d\n\n", i, j/3, k, locate_out);
+                printf("write at pixel: %d %d, color: %d, address: %d\n\n", i, j/3, x, locate_out);
                 result[locate_out] = avg;
                 for (short idx = 7; idx >= 0; idx--) {
                     // TODO: buggy when casting locate_out to uchar

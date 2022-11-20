@@ -26,7 +26,6 @@
 
 	.globl bmpresize
 bmpresize:
-	# TODO
 	addi sp, sp, -16
 	sw a0, 16(sp) #imgptr
 	sw a1, 12(sp) #h
@@ -89,7 +88,6 @@ For1: # loop with i : use a0(i)
 	addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 
 	# Body - For1
-	nop	
 		mv a1, x0 # Init - For2
 	For2: # loop with j : use a1(j)
 		addi sp, sp, -4
@@ -103,9 +101,14 @@ For1: # loop with i : use a0(i)
 		#Body - For2
 		nop
 			mv a2, x0 # Init - For3
+			
+		For3: # loop with x : use a2(x)	
+			addi sp, sp, -4
+			sw t1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t1(sp)
 			addi t1, x0, 3
-		For3: # loop with k : use a2(k), t1(3)			
 			bge a2, t1, ForExit3
+			lw t1, 0(sp)
+			addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 
 			#Body - For3
 
@@ -115,9 +118,16 @@ For1: # loop with i : use a0(i)
 				addi t2, a3, 1
 				mul a3, a3, a0 # m = i * scaling_factor						
 				mul t2, t2, a0 # (i + 1) * scaling_factor
+				# cant reduce maybe
 
 			For4: # a3(m), t2
+				#addi sp, sp, -4
+				#sw t2, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t2(sp)
+				
 				bge a3, t2, ForExit4
+				#lw t2, 0(sp)
+				#addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+
 				nop
 					#Init - For5
 					lw a4, 16(sp)
@@ -129,52 +139,239 @@ For1: # loop with i : use a0(i)
 					nop
 					# load and compute avg
 
-					# TODO
-					
+					# t1, t4 : free
+					# t0 : avg
+					# t2, t3 : for loop
+
+					# locate = m * w_bytes + n+x // for load value
+					lw t1, 4(sp) # w_bytes
+					mul t1, t1, a3 # *m
+					add t1, t1, a4 # +n
+					add t1, t1, a2 # +x
+					# consider little endian
+					mv t4, t1
+					srli t4, 2 # locate / 4
+					slli t4, 2 # locate/4 * 4
+
+
+					addi sp, sp, -16
+					sw t2, 12(sp)
+					sw t3, 8(sp)
+					sw a0, 4(sp)
+					sw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t2 t3 a0 a1(sp)
+
+					sub a0, t1, t4 # locate % 4
+					lw a1, 44(sp) # imgptr
+					addi a1, a1, t4 # imgptr + locate/4*4
+					lw a1, 0(a1) # load value - 4byte
+					addi t2, x0, 3
+					sub t2, t2, a0
+					mul t2, t2, 2
+					# little endian : 33 22 11 00
+					# locate % 4 = 0 -> 6, 1->4, 2->2, 3->0 shift left
+					# shift left (3 - locate%4) * 2
+					sll a1, t2 # ex) l%4 = 2, shift left 2, 22 11 00 00
+					# shift right 6 - ((3 - locate%4) * 2)
+					addi t3, x0, 6
+					sub t3, t3, t2
+					srl a1, t3 # a1: 00 00 00 value
+
+					add t0, a1 # avg += *(imgptr + locate);
+
+					lw t2, 12(sp)
+					lw t3, 8(sp)
+					lw a0, 4(sp)
+					lw a1, 0(sp)
+					addi sp, sp, 16
+					# imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+
 					addi a4, a4, 3 # update for5
 					blt a4, t3, For5
 				ForExit5:
 					nop
 				addi a3, a3, 1 # update for4
+
+				#addi sp, sp, -4
+				#sw t2, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t2(sp)
+				#addi t2, a3, 1				
+				#mul t2, t2, a0 # (i + 1) * scaling_factor				
 				blt a3, t2, For4
 
 			ForExit4:
-				nop
+				#lw t2, 0(sp)
+				#addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 			lw t4, sp(24) # k
 			mul t4, t4, 2 #  2*k
-			srli t0, t4 # avg /= (scaling_factor * scaling_factor);
+			srl t0, t4 # avg /= (scaling_factor * scaling_factor);
 
-			# TODO: write avg
-				
+			# locate_out = i * w_bytes_resized + (j+x);
+			lw t1, 0(sp)
+			mul t1, t1, a0
+			add t1, t1, a1
+			add t1, t1, a2			
+			mv t4, t1
+			srli t4, 2
+			slli t4, 2 # locate/4 * 4
 
+			addi sp, sp, -16
+			sw t2, 12(sp)
+			sw t3, 8(sp)
+			sw a0, 4(sp)
+			sw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t2 t3 a0 a1(sp)
+
+			sub a0, t1, t4 # locate % 4
+			lw a1, 36(sp) # outptr
+			addi a1, a1, t4 # out word address
+			lw t2, 0(a1) # load value - 4byte
+
+			# 00 00 00 value -> shift left -> add a1 -> sw a1
+			# 33 22 11 00 -> shift left 3*(locate%4)
+			addi sp, sp, -4
+			sw t1, 0(sp)
+			addi t1, x0, 3
+			mul t1, a0, t1
+			sll t0, t1 # 00 value 00 00
+			lw t1, 0(sp)
+			addi sp, sp, 4
+
+			addi t2, t2, t0
+			sw t2, 0(a1)  # write avg with little endian
+
+			lw t2, 12(sp)
+			lw t3, 8(sp)
+			lw a0, 4(sp)
+			lw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+			addi sp, sp, 16
 
 			addi a2, a2, 1 # update for3
+			addi sp, sp, -4
+			sw t1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t1(sp)
+			addi t1, x0, 3
 			blt a2, t1, For3
-
 		ForExit3:		
-			nop
+			lw t1, 0(sp)
+			addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 		addi a1, a1, 3 # update for2
 		addi sp, sp, -4
 		sw a2, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized a2(sp)
 		lw a2, 12(sp) # w/2^k
 		mul a2, a2, 3
 		blt a1, a2, For2
-		lw a2, 0(sp)
-		addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+		#lw a2, 0(sp)
+		#addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 
 	ForExit2:
 		lw a2, 0(sp)
 		addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 
 	# TODO: padding
+	# pad_bytes = w_resized * 3 % 4 == 0 ? 0 : 4 - (w_resized * 3 % 4);
+	addi sp, sp, -16
+	sw t2, 12(sp)
+	sw t3, 8(sp)
+	sw a2, 4(sp)
+	sw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t2 t3 a2 a1(sp)
+
+	// a0 - t3 swap
+
+	#lw a0, 24(sp) # w/2^k
+	lw t3, 24(sp)
+	addi t2, x0, 3
+	# mul a0, a0, t2
+	mul t3, t3, t2 # 3*w_resized
+	#srli a1, a0, 2
+	srli a1, t3, 2
+	slli a1, a1, 2
+	#sub t2, a0, a1
+	sub t2, t3, a1 # 3*W_r % 4
+	#addi t3, x0, 4
+	addi a2, x0, 4
+	mv a1, x0
+	#beq a0, x0, L3
+	beq t2, x0, L3
+	#sub a1, t3, t2 # 4 - (w_resized * 3 % 4)
+	sub a1, a2, t2 # 4 - (w_resized * 3 % 4)
+	# skip if 3*W_r % 4 == 0
+L3: 
+	# t3: w_resized * 3
+
+
+	# a1: pad_bytes
+
+	lw t3, 24(sp)
+	addi t2, x0, 3
+	mul t3, t3, t2 # don't need actually
+	add t2, t3, a1
+	ForInner: # t3 t2
+		bge t3, t2, ForInnerExit
+		#	Body
+		# locate =  i * w_bytes_resized + idx
+		lw a1, 16(sp) # w_b_r
+		mul a1, a1, a0
+		add a1, a1, t3 # locate
+
+		mv a2, a1
+		srli a2, 2
+		slli a2, 2 # l/4*4
+
+		addi sp, sp, -20
+		sw t2, 16(sp)
+		sw t3, 12(sp)
+		sw a0, 8(sp)
+		sw a3, 4(sp)
+		sw a4, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t2 t3 a2 a1 / t2 t3 a0 a3 a4(sp)
+
+
+		sub a3, a1, a2 # a3 = locate % 4
+# TODO
+		lw a4, 56(sp) # outptr
+		add a4, a4, a2 # padding locate
+		lw a1, 0(a4) # 33 22 11 00
+		
+		# TODO
+		# 33 22 11 00 -> 33 00 11 00
+
+
+					addi t2, x0, 3
+					sub t2, t2, a0
+					mul t2, t2, 2
+					# little endian : 33 22 11 00
+					# locate % 4 = 0 -> 6, 1->4, 2->2, 3->0 shift left
+					# shift left (3 - locate%4) * 2
+					sll a1, t2 # ex) l%4 = 2, shift left 2, 22 11 00 00
+					# shift right 6 - ((3 - locate%4) * 2)
+					addi t3, x0, 6
+					sub t3, t3, t2
+					srl a1, t3 # a1: 00 00 00 value
+
+					add t0, a1 # avg += *(imgptr + locate);
+
+
+		
+		lw t2, 16(sp)
+		lw t3, 12(sp)
+		lw a0, 8(sp)
+		lw a3, 4(sp)
+		lw a4, 0(sp)
+		addi sp, sp, 20 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t2 t3 a2 a1(sp)		
+
+
+
+		# Update
+		addi t3, t3, 1
+		blt t3, t2, ForInner
+	ForInnerExit:
+		nop
+
 
 
 	addi a0, a0, 1 # update for1
 	sw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized a1(sp)
 	lw a1, 16(sp) # h/2^k
 	blt a0, a1, For1 # if i >= h/2^k EXIT
-	lw a1, 0(sp)
-	addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+	# TODO: two lines need or not? may be executed in ForExit1 after not branch blt
+	#lw a1, 0(sp)
+	#addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 
 
 
