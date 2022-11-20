@@ -38,22 +38,11 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
     int locate_out = 0;
     for (int i=0; i<h_resized; i++) {
         for (int j=0; j<w_resized*3; j=j+3) { // j = j+3
-            avg = 0;
-
-            // b g r 세트 말고, 하나씩 따로 움직이도록 바꿀것
-
-            // locate = i*scaling_factor*w_resized + j*scaling_factor; // start address of the original large pixels
-            // i=0, j=0
-            // m = 0, 1
-            // n = 0, 4
-            // n = 0*2^1 = 0
-            // n < 3*2^1 = 6
-
             for (int k=0; k<3; k++) {
                 avg = 0;
                 for (int m = i * scaling_factor; m < (i + 1) * scaling_factor; m++) {
                     for (int n = j * scaling_factor; n < (j+3) * scaling_factor; n+=3) { // n = n+3
-                        locate = m * w_bytes + n+k; // TODO
+                        locate = m * w_bytes + n+k;
                         avg += *(imgptr + locate);
                         printf("value: %d, pixel: %d %d, color: %d, address: %d\n", *(imgptr + locate), m, n/3, k,
                                locate);

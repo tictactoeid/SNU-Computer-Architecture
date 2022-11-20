@@ -22,7 +22,7 @@
 ####################
 
 # ao imgptr, a1 h, a2 w, a3 k, a4 outptr
-# x0, sp, ra, a0 a1 a2 a3 a4,  t0 t1 t2 t3 t4
+# x0, sp, ra, a0 a1 a2 a3 a4, t0 t1 t2 t3 t4
 
 	.globl bmpresize
 bmpresize:
@@ -74,14 +74,118 @@ L2:
 	sw t3, 0(sp)
 	# imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 
-	mv t0, x0 # avg_b
-	mv t1, x0 # g
-	mv t2. x0 # r
+	mv t0, x0 # avg
 
 	# Init - For1
 	mv a0, x0 # i
 	# ! i<h_resized => i >= h/2^k => a1 >= a2
-	
+
+For1: # loop with i : use a0(i)
+	addi sp, sp, -4
+	sw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized a1(sp)
+	lw a1, 16(sp) # h/2^k
+	bge a0, a1, ForExit1 # if i >= h/2^k EXIT
+	lw a1, 0(sp)
+	addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+
+	# Body - For1
+	nop	
+		mv a1, x0 # Init - For2
+	For2: # loop with j : use a1(j)
+		addi sp, sp, -4
+		sw a2, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized a2(sp)
+		lw a2, 12(sp) # w/2^k
+		mul a2, a2, 3
+		bge a1, a2, ForExit2
+		lw a2, 0(sp)
+		addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+
+		#Body - For2
+		nop
+			mv a2, x0 # Init - For3
+			addi t1, x0, 3
+		For3: # loop with k : use a2(k), t1(3)			
+			bge a2, t1, ForExit3
+
+			#Body - For3
+
+			mv t0, x0 # avg = 0
+				# Init - For4
+				lw a3, 16(sp) # scaling factor, 2^k
+				addi t2, a3, 1
+				mul a3, a3, a0 # m = i * scaling_factor						
+				mul t2, t2, a0 # (i + 1) * scaling_factor
+
+			For4: # a3(m), t2
+				bge a3, t2, ForExit4
+				nop
+					#Init - For5
+					lw a4, 16(sp)
+					addi t3, a4, 3
+					mul a4, a4, a1 # n = j * scaling_factor	
+					mul t3, t3, a1
+				For5: # a4(n), t3
+					bge a4, t3, ForExit5
+					nop
+					# load and compute avg
+
+					# TODO
+					
+					addi a4, a4, 3 # update for5
+					blt a4, t3, For5
+				ForExit5:
+					nop
+				addi a3, a3, 1 # update for4
+				blt a3, t2, For4
+
+			ForExit4:
+				nop
+			lw t4, sp(24) # k
+			mul t4, t4, 2 #  2*k
+			srli t0, t4 # avg /= (scaling_factor * scaling_factor);
+
+			# TODO: write avg
+				
+
+
+			addi a2, a2, 1 # update for3
+			blt a2, t1, For3
+
+		ForExit3:		
+			nop
+		addi a1, a1, 3 # update for2
+		addi sp, sp, -4
+		sw a2, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized a2(sp)
+		lw a2, 12(sp) # w/2^k
+		mul a2, a2, 3
+		blt a1, a2, For2
+		lw a2, 0(sp)
+		addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+
+	ForExit2:
+		lw a2, 0(sp)
+		addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+
+	# TODO: padding
+
+
+	addi a0, a0, 1 # update for1
+	sw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized a1(sp)
+	lw a1, 16(sp) # h/2^k
+	blt a0, a1, For1 # if i >= h/2^k EXIT
+	lw a1, 0(sp)
+	addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+
+
+
+ForExit1:
+	lw a1, 0(sp)
+	addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
+
+
+
+
+/*	
 For1: #for loop 1: a0
 	lw a1, 12(sp) #h/2^k
 	bge a0, a1, ForExit1 # if i >= h/2^k EXIT
@@ -159,7 +263,7 @@ ForExit2:
 
 ForExit1: 
 
-
+*/
 	
 
 
