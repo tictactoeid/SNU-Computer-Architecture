@@ -22,23 +22,20 @@ unsigned char get_a_bit (unsigned char value, short idx) { // ok
 
 
 void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr) {
-    unsigned char result[24];
-    for (int i=0; i<24; i++) result[i] = 255;
     int scaling_factor = (int) pow(2, k);
     int h_resized = h / scaling_factor;
     int w_resized = w / scaling_factor;
     int w_bytes = 3*w % 4 == 0 ? 3*w : ((3*w)/4) * 4 + 4;
     int w_bytes_resized = 3*w_resized % 4 == 0 ? 3*w_resized : ((3*w_resized)/4) * 4 + 4;
-    // unsigned char avg_b, avg_g, avg_r = 0;
-    // int sum_b, sum_g, sum_r = 0;
-    // unsigned char avg = 0;
-    unsigned int avg = 0;
-
+    unsigned char avg_b, avg_g, avg_r = 0;
+    int sum_b, sum_g, sum_r = 0;
     int locate = 0;
     int locate_out = 0;
     for (int i=0; i<h_resized; i++) {
-        for (int j=0; j<w_resized*3; j=j+3) { // j = j+3
-            avg = 0;
+        for (int j=0; j<w_resized*3; j=j+3) {
+            sum_b = 0;
+            sum_g = 0;
+            sum_r = 0;
 
             // locate = i*scaling_factor*w_resized + j*scaling_factor; // start address of the original large pixels
             // i=0, j=0
@@ -47,43 +44,40 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
             // n = 0*2^1 = 0
             // n < 3*2^1 = 6
 
-            for (int k=0; k<3; k++) {
-                avg = 0;
-                for (int m = i * scaling_factor; m < (i + 1) * scaling_factor; m++) {
-                    for (int n = j * scaling_factor; n < (j+3) * scaling_factor; n+=3) { // n = n+3
-                        locate = m * w_bytes + n+k; // TODO
-                        avg += *(imgptr + locate);
-                        printf("value: %d, pixel: %d %d, color: %d, address: %d\n", *(imgptr + locate), m, n/3, k,
-                               locate);
-                    }
+
+            for (int m=i*scaling_factor; m<(i+1)*scaling_factor; m++) {
+                for (int n=j*scaling_factor; n<(j+3)*scaling_factor; n=n+3) {
+
+                    locate = m*w_bytes + n;
+                    sum_b += *(imgptr + locate);
+                    sum_g += *(imgptr + locate+1);
+                    sum_r += *(imgptr + locate+2);
+                    printf("%d %d %d\n", m, n, locate);
+                    printf("value: %d %d %d\n", *(imgptr + locate), *(imgptr + locate+1), *(imgptr + locate+2));
                 }
                 printf("\n");
-
-                printf("sum: %d, ", avg);
-                avg /= (scaling_factor * scaling_factor);
-                locate_out = i * w_bytes_resized + (j+k);
-                printf("avg: %d\n", avg);
-                printf("write at pixel: %d %d, color: %d, address: %d\n\n", i, j/3, k, locate_out);
-                result[locate_out] = avg;
-                for (short idx = 7; idx >= 0; idx--) {
-                    // TODO: buggy when casting locate_out to uchar
-                    write_a_bit(outptr + (unsigned char) locate_out, get_a_bit(avg, idx), idx);
-                }
             }
+            printf("sum: %d %d %d\n", sum_b, sum_g, sum_r);
+            avg_b = sum_b / (scaling_factor*scaling_factor);
+            avg_g = sum_g / (scaling_factor*scaling_factor);
+            avg_r = sum_r / (scaling_factor*scaling_factor);
+            locate_out = i*w_bytes_resized + j;
+            printf("avg: %d %d %d i: %d j: %d\n", avg_b, avg_g, avg_r, i, j);
+            printf("write at %d\n\n",locate_out);
+            for (short idx=7; idx>=0; idx--) {
+                // TODO: Logic is fine but some bug in writing ?
+                write_a_bit(outptr + locate_out, get_a_bit(avg_b, idx), idx);
+                write_a_bit(outptr + locate_out + 1, get_a_bit(avg_g, idx), idx);
+                write_a_bit(outptr + locate_out + 2, get_a_bit(avg_r, idx), idx);
+            }
+
         }
-        int pad_bytes = w_resized * 3 % 4 == 0 ? 0 : 4 - (w_resized * 3 % 4);
-        for (int idx = w_resized * 3; idx < w_resized * 3 + pad_bytes; idx++) {
-            // write_a_bit(outptr + (unsigned char)i*w_bytes_resized + h_resized, 0, idx);
-            result[i * w_bytes_resized + idx] = 0;
+        int pad_bytes = w_resized*3 % 4 == 0 ? 0 : 4 - (w_resized*3 % 4);
+        for (int idx=0; idx<pad_bytes; idx++) {
+            write_a_bit(outptr + i*w_bytes_resized + h_resized, 0, idx);
         }
     }
-    for (int i=0; i<12; i++) {
-        printf("0x%04x ", result[i]);
-    }
-    printf("\n");
-    for (int i=12; i<24; i++) {
-        printf("0x%04x ", result[i]);
-    }
+
 }
 
 int main() {
@@ -94,6 +88,12 @@ int main() {
 
     unsigned char outptr[24] = {0,};
     bmpresize(imgptr, 4, 6, 1, outptr);
+    for (int i=0; i<2; i++) {
+        for (int j=0; j<12; j++) {
+            printf("0x%04x ", outptr[i*3+j]);
+        }
+        printf("\n");
+    }
 
     return 0;
 }
