@@ -40,6 +40,8 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
         for (int j=0; j<w_resized*3; j=j+3) { // j = j+3
             avg = 0;
 
+            // b g r 세트 말고, 하나씩 따로 움직이도록 바꿀것
+
             // locate = i*scaling_factor*w_resized + j*scaling_factor; // start address of the original large pixels
             // i=0, j=0
             // m = 0, 1
