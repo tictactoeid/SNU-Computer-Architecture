@@ -26,13 +26,14 @@
 
 	.globl bmpresize
 bmpresize:
-
+	
 	addi sp, sp, -20
 	sw a0, 16(sp) #imgptr
 	sw a1, 12(sp) #h
 	sw a2, 8(sp) #w
 	sw a3, 4(sp) #k
 	sw a4, 0(sp) #outptr
+	
 	# imgptr h w k outptr(sp)
 	addi t0, x0, 1
 	sll t0, t0, a3
@@ -40,6 +41,8 @@ bmpresize:
 	addi sp, sp, -4
 	sw t0, 0(sp)
 	# imgptr h w k outptr scaling_factor(sp)
+	
+
 	mv t0, a1
 	mv t1, a2
 	srl t0, t0, a3
@@ -48,16 +51,19 @@ bmpresize:
 	sw t0, 4(sp) # h/2^k
 	sw t1, 0(sp) # w/2^k
 	# imgptr h w k outptr scaling_factor h/2^k w/2^k(sp)
-	mv t3, t0
-	slli t3, t3, 1
-	add t3, t0, t3 # w*3
-	mv t1, t0
-	srl t1, t1, 2 # w*3 / 4
-	slli t1, t1, 2 # w*3 / 4 * 4
+
+	lw t3, 20(sp) # t3 = w_r
+	mv t0, t3
+	slli t3, t3, 1 
+	add t3, t0, t3 # t3 = w*3
+	mv t1, t3 # w*3
+	srli t1, t1, 2 # w*3 / 4
+	slli t1, t1, 2 # t1 = w*3 / 4 * 4
 	sub t2, t0, t1 # t2 = w*3 % 4
-	sub t3, t0, t2
-	bne t2, x0, L1
-	mv t3, x0 # w_resized = 0, skipped if t2 != x0
+	beq t2, x0, L1 # w_bytes = 3*w if 3*w % 4 == 0
+	addi t3, t1, 4 # else ((3*w)/4) * 4 + 4 : t1 + 4
+
+
 L1:
 	addi sp, sp, -4
 	sw t3, 0(sp)
@@ -67,15 +73,16 @@ L1:
 
 	mv t3, t0
 	slli t3, t3, 1
-	add t0, t3, t0
+	add t3, t3, t0 # t3 = 3*w_r
 
-	mv t1, t0
-	srl t1, t1, 2 # w_r*3 / 4
-	slli t1, t1, 2
-	sub t2, t0, t1 # t2 = w_r*3 % 4
-	sub t3, t0, t2
-	bne t2, x0, L2
-	mv t3, x0 # skipped if t3 != x0
+	mv t1, t3
+	srl t1, t1, 2 
+	slli t1, t1, 2 # t1 = w_r*3 / 4 *4
+	sub t2, t3, t1 # t2 = w_r*3 % 4
+
+	beq t2, x0, L2 # w_bytes_resized = 3*wr if 3*wr % 4 == 0
+	addi t3, t1, 4 # else ((3*wr)/4) * 4 + 4 : t1 + 4
+
 L2:
 	addi sp, sp, -4
 	sw t3, 0(sp)
@@ -119,7 +126,7 @@ For1: # loop with i : use a0(i)
 		#Body - For2
 		addi a2, x0, 2 # Init - For3
 			
-		For3: # loop with x : use a2(2-x)				
+		For3: # loop with x : use a2(2-x): 2, 1, 0
 			blt a2, x0, ForExit3
 
 			#Body - For3
@@ -153,6 +160,7 @@ For1: # loop with i : use a0(i)
 				addi sp, sp, 12
 				
 				add t2, t2, a3 # (i + 1) * scaling_factor / sf + i*sf
+				
 				# cant reduce maybe
 				
 			For4: # a3(m), t2				
@@ -198,7 +206,11 @@ For1: # loop with i : use a0(i)
 					# t2, t3 : for loop
 
 					# locate = m * w_bytes + n+x // for load value
+
+					# TODO: locate miscalculated?
+
 					lw t1, 4(sp) # w_bytes
+					#TODO: lw miss
 					
 
 					addi sp, sp, -12
@@ -220,8 +232,7 @@ For1: # loop with i : use a0(i)
 					lw t2, 4(sp)
 					lw t3, 0(sp)
 					addi sp, sp, 12
-
-
+					
 					add t1, t1, a4 # +n
 
 					addi sp, sp, -4
@@ -232,12 +243,7 @@ For1: # loop with i : use a0(i)
 					lw a0, 0(sp)
 					addi sp, sp, 4
 
-					#addi t1, t1, 2
-					#sub t1, t1, a2 # +x-2 / a2 = 2-x
-					# TODO: sub causes overflow => ok now?
-
-
-					  #+x
+					#+x
 					# consider little endian
 					mv t4, t1
 					srli t4, t4, 2 # locate / 4
@@ -254,13 +260,9 @@ For1: # loop with i : use a0(i)
 					lw a1, 52(sp) # imgptr
 					
 					add a1, a1, t4 # imgptr + locate/4*4
-
-
 					
 					lw a1, 0(a1) # load value - 4byte
 
-
-					
 					addi t2, x0, 3			
 					sub t2, t2, a0		
 					slli t2, t2, 3
@@ -276,6 +278,8 @@ For1: # loop with i : use a0(i)
 					addi t3, x0, 24					
 					srl a1, a1, t3 # a1: 0x00 00 00 value
 					add t0, t0, a1 # avg += *(imgptr + locate);
+
+					
 					
 					lw t2, 12(sp)
 					lw t3, 8(sp)
@@ -414,19 +418,24 @@ For1: # loop with i : use a0(i)
 
 			add t2, t2, t0
 			sw t2, 0(a1)  # write avg with little endian		
+
+			
 			
 			lw t2, 12(sp)
 			lw t3, 8(sp)
 			lw a0, 4(sp)
 			lw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 			addi sp, sp, 16
-
+			
 			addi a2, a2, -1 # update for3
+
+			
 			#blt a2, t1, For3
 			
 			bge a2, x0, For3
 		ForExit3:
 			nop
+			
 
 
 		addi a1, a1, 3 # update for2

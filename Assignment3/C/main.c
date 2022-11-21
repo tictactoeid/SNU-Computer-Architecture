@@ -39,7 +39,6 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
     for (int i=0; i<h_resized; i++) {
         for (int j=0; j<w_resized*3; j=j+3) { // j = j+3
             for (int x=0; x<3; x++) {
-                // TODO: do not use k
 
                 avg = 0;
                 for (int m = i * scaling_factor; m < (i + 1) * scaling_factor; m++) {
