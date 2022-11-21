@@ -22,8 +22,8 @@ unsigned char get_a_bit (unsigned char value, short idx) { // ok
 
 
 void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr) {
-    unsigned char result[24];
-    for (int i=0; i<24; i++) result[i] = 255;
+    unsigned char result[36];
+    for (int i=0; i<36; i++) result[i] = 255;
     int scaling_factor = (int) pow(2, k);
     int h_resized = h / scaling_factor;
     int w_resized = w / scaling_factor;
@@ -67,6 +67,8 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
         for (int idx = w_resized * 3; idx < w_resized * 3 + pad_bytes; idx++) {
             // write_a_bit(outptr + (unsigned char)i*w_bytes_resized + h_resized, 0, idx);
             result[i * w_bytes_resized + idx] = 0;
+            printf("zero-pad %d\n", i * w_bytes_resized + idx);
+            // locate = i * w_bytes_resized + idx
         }
     }
     for (int i=0; i<12; i++) {
@@ -76,6 +78,11 @@ void bmpresize(unsigned char *imgptr, int h, int w, int k, unsigned char *outptr
     for (int i=12; i<24; i++) {
         printf("0x%04x ", result[i]);
     }
+    printf("\n");
+    for (int i=24; i<36; i++) {
+        printf("0x%04x ", result[i]);
+    }
+    printf("\n");
 }
 
 int main() {
@@ -84,7 +91,8 @@ int main() {
                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x35, 0xf2, 0xfb, 0x0a, 0x6a, 0xfa, 0x0a, 0x6a, 0xfa, 0x00, 0x00, 0x00, 0x00, 0x00,
                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x35, 0xf2, 0xfb, 0x35, 0xf2, 0xfb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-    unsigned char outptr[24] = {0,};
+    unsigned char outptr[24] = {0,}; // dummy
+
     bmpresize(imgptr, 4, 6, 1, outptr);
 
     return 0;
