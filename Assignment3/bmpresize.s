@@ -26,13 +26,10 @@
 
 	.globl bmpresize
 bmpresize:
-	#lw t0, 0(a4)
-	#lw t1, 4(a4)
-	#lw t2, 8(a4)
-	#lw t3, 12(a4)
-	#lw t4, 16(a4)
+	
+	#addi sp, sp, 200
+	#sw a0, 4(sp)
 	#ebreak
-
 
 	addi sp, sp, -20
 	sw a0, 16(sp) #imgptr
@@ -67,17 +64,9 @@ bmpresize:
 	srli t1, t1, 2 # w*3 / 4
 	slli t1, t1, 2 # t1 = w*3 / 4 * 4
 
-	#ebreak
-	sub t2, t3, t1 # t2 = w*3 % 4
-
-	
-
-
+	sub t2, t3, t1 # t2 = w*3 % 4	
 	beq t2, x0, L1 # w_bytes = 3*w if 3*w % 4 == 0
 	addi t3, t1, 4 # else ((3*w)/4) * 4 + 4 : t1 + 4
-
-
-
 
 L1:
 	
@@ -85,7 +74,6 @@ L1:
 	sw t3, 0(sp)
 	# imgptr h w k outptr scaling_factor h/2^k w/2^k w_bytes(sp)
 	lw t0, 4(sp) #w_resized
-	#mul t0, t0, 3
 
 	mv t3, t0
 	slli t3, t3, 1
@@ -109,9 +97,6 @@ L2:
 
 	# ------------------------- Init Variables --------------------------------
 
-
-	
-
 	# Init - For1
 	addi sp, sp, -4
 	sw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized a1(sp)
@@ -120,16 +105,11 @@ L2:
 	lw a1, 0(sp)
 	addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 
-
-	# ! i<h_resized => i >= h/2^k => a1 >= a2
-
 For1: # loop with i : use a0 = h/2^k-1 - i
 	blt a0, x0, ForExit1
 
-	#bge a0, a1, ForExit1 # if i >= h/2^k EXIT
-
 	# Body - For1
-		# mv a1, x0 # Init - For2
+		# Init - For2
 		addi sp, sp, -8
 		sw a3, 4(sp)
 		sw a2, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized a3 a2(sp)
@@ -137,16 +117,14 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 
 		mv a3, a2
 		slli a3, a3, 1
-		add a2, a3, a2 #mul a2, a2, 3 : a2 = w/2^k *3
+		add a2, a3, a2 # a2 = w/2^k *3
 
 		addi a1, a2, -1 # init a1: a1=w_r*3-1; a1>=0; a1-=3
-
 		
 		lw a3, 4(sp)
 		lw a2, 0(sp)
 		addi sp, sp, 8 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
-
-		
+	
 
 	For2: # loop with j : use a1(j)
 		
@@ -157,9 +135,7 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 			
 		For3: # loop with x : use a2(2-x): 2, 1, 0
 			blt a2, x0, ForExit3
-
-			#Body - For3
-			
+			#Body - For3			
 			mv t0, x0 # avg = 0
 				# Init - For4
 				lw a3, 16(sp) # scaling factor, 2^k
@@ -180,29 +156,22 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 					bge t0, t1, MultipleExit1
 					add t4, t4, a3 # t4 += sf
 					addi t0, t0, 1
-					blt t0, t1, Multiple1					
+					blt t0, t1, Multiple1
 
 				MultipleExit1:
 					mv a3, t4
-
 				
 				lw t0, 8(sp)
 				lw t1, 4(sp)
 				lw t4, 0(sp)
 				addi sp, sp, 12 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
-
-				
-				
 				add t2, t2, a3 # (i + 1) * scaling_factor / sf + i*sf
-				
-				# cant reduce maybe
 				
 			For4: # a3(m), t2				
 				bge a3, t2, ForExit4
 
 					#Init - For5
 					lw a4, 16(sp)
-					#addi t3, a4, 3
 					mv t3, a4 # sf
 					slli t3, t3, 1 # 2*sf
 					add t3, t3, a4 # 3*sf					
@@ -218,7 +187,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 					add t1, t0, t1 # 3*w_r
 					addi t1, t1, -1
 					sub t1, t1, a1 # t1: j = w_resized*3 - 1 - a1
-					#mv t1, a1 
 					mv t0, x0
 					mv t2, x0
 					Multiple2: # mul a4, a4, j
@@ -232,10 +200,7 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 					lw t0, 8(sp)
 					lw t1, 4(sp)
 					lw t2, 0(sp)
-					addi sp, sp, 12 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
-
-					
-					
+					addi sp, sp, 12 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)					
 					add t3, t3, a4 # (j+3) * scaling_factor	
 				 
 				For5: # a4(n), t3
@@ -249,11 +214,8 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 
 					# locate = m * w_bytes + n+x // for load value
 
-					# TODO: locate miscalculated?
-
 					lw t1, 4(sp) # w_bytes
-					#TODO: lw miss
-					
+				
 
 					addi sp, sp, -12
 					sw t0, 8(sp)
@@ -275,9 +237,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 					lw t3, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 					addi sp, sp, 12
 
-					
-
-
 					add t1, t1, a4 # +n
 
 					addi sp, sp, -4
@@ -287,8 +246,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 					add t1, t1, a0
 					lw a0, 0(sp)
 					addi sp, sp, 4
-
-
 
 					#+x
 					# consider little endian
@@ -324,8 +281,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 					addi t3, x0, 24					
 					srl a1, a1, t3 # a1: 0x00 00 00 value
 					add t0, t0, a1 # avg += *(imgptr + locate);
-
-					
 					
 					lw t2, 12(sp)
 					lw t3, 8(sp)
@@ -333,7 +288,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 					lw a1, 0(sp)
 					addi sp, sp, 16
 					# imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
-
 										
 					addi a4, a4, 3 # update for5
 					blt a4, t3, For5
@@ -345,8 +299,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 				
 
 			ForExit4:
-				#lw t2, 0(sp)
-				#addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 			lw t4, 24(sp) # k
 			
 			# stack pointer ok
@@ -361,7 +313,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 				sw t2, 4(sp)
 				sw t4, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t0 t2 t4(sp)
 
-
 				lw t2, 24(sp)
 				addi t2, t2, -1
 				sub t2, t2, a0
@@ -372,7 +323,7 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 					bge t0, t2, MultipleExit4
 					add t4, t4, t1 # t4 += w_b_r
 					addi t0, t0, 1
-					blt t0, t2, Multiple4					
+					blt t0, t2, Multiple4
 
 				MultipleExit4:
 					mv t1, t4 # t1 = i * wbr
@@ -397,12 +348,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 			lw t4, 0(sp)
 			addi sp, sp, 8 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 			
-			
-			
-
-
-			
-
 			addi sp, sp, -4
 			sw a0, 0(sp)
 			addi a0, x0, 2
@@ -448,10 +393,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 			sll t0, t0, t1 # 0x00 value 00 00
 			# shift left done	
 			
-			#lw t1, 0(sp) # shift left done	
-			#addi sp, sp, 4 		
-			#=> from where
-			
 			addi sp, sp, -12
 			sw a1, 8(sp)
 			sw a3, 4(sp)
@@ -463,7 +404,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 			addi a1, x0, 2
 			beq a0, a1, Mask2
 			j Mask3
-
 
 		Mask0:
 			li a3, 0xFFFFFF00
@@ -486,9 +426,7 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 			addi sp, sp, 12 # make t2 zero at that byte
 
 			add t2, t2, t0
-			sw t2, 0(a1)  # write avg with little endian		
-
-			
+			sw t2, 0(a1)  # write avg with little endian					
 			
 			lw t2, 12(sp)
 			lw t3, 8(sp)
@@ -496,15 +434,10 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 			lw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 			addi sp, sp, 16
 
-			addi a2, a2, -1 # update for3
-
-			
-			#blt a2, t1, For3
-			
+			addi a2, a2, -1 # update for3			
 			bge a2, x0, For3
 		ForExit3:
-			nop
-			
+			nop		
 
 
 		addi a1, a1, -3 # update for2
@@ -530,23 +463,9 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 
 		bge a1, x0, For2
 
-		#bge a1, a2, ForLoop2 # Loop once again # ForLoop2
-		#j ForExit2: don't need, we have another branch in head of for2
-		# TODO: j ForExit2, ForExit1 may causes bug
-		
-	#ForLoop2:
-	#	lw a2, 0(sp)
-	#	addi sp, sp, 4
-	#	j For2 
 
 	ForExit2:
 		nop
-		#lw a2, 0(sp)
-		#addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
-
-	# TODO: sp 1개 차이는 어디서 온 것인가?
-
-	# pad_bytes = w_resized * 3 % 4 == 0 ? 0 : 4 - (w_resized * 3 % 4);
 	addi sp, sp, -16
 	sw t2, 12(sp)
 	sw t3, 8(sp)
@@ -565,7 +484,6 @@ For1: # loop with i : use a0 = h/2^k-1 - i
 	
 	mv a1, x0 # pad_bytes = 0 
 	beq t2, x0, L3 # if w_resized * 3 % 4 == 0
-	## else
 	addi a2, x0, 4 
 	sub a1, a2, t2 # 4 - (w_resized * 3 % 4)
 L3: 
@@ -588,8 +506,7 @@ L3:
 			sw t2, 4(sp)
 			sw t4, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t2 t3 a2 a1/t0 t2 t4(sp)
 
-			
-			# mv t2, a0 # i
+
 			lw t2, 40(sp) # i = h/2^k - 1 - a0
 			addi t2, t2, -1
 			sub t2, t2, a0
@@ -612,17 +529,12 @@ L3:
 		
 		add a1, a1, t3 # locate = i * w_bytes_resized + idx = a1 + t3
 
-		
-	# TODO: chk locate
-
 		mv a2, a1
 
 		
 		srli a2, a2, 2
-		slli a2, a2, 2 # a2 = locate/4*4
+		slli a2, a2, 2 # a2 = locate/4*4	
 		
-		
-
 		addi sp, sp, -20
 		sw t2, 16(sp)
 		sw t3, 12(sp)
@@ -630,24 +542,16 @@ L3:
 		sw a3, 4(sp)
 		sw a4, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized t2 t3 a2 a1 / t2 t3 a0 a3 a4(sp)
 
-
 		sub a3, a1, a2 # a3 = locate % 4
 
-
 		lw a4, 56(sp) # outptr
-
 
 		add a4, a4, a2 # padding locate
 		
 		lw a1, 0(a4) # 3333 2222 1111 0000
 		
-		#slli t2, a3, 1
-		#addi t2, t2, 2 # locate % 4 *2 +2
-
 		addi sp, sp, -4
-		sw a1, 0(sp)
-
-		
+		sw a1, 0(sp)		
 		
 		beq a3, x0, Pad0
 		addi a1, x0, 1 # a1: temp value
@@ -655,10 +559,7 @@ L3:
 		addi a1, x0, 2
 		beq a3, a1, Pad2
 		j Pad3
-		
-		#addi sp, sp, -4
-		#sw a3, 0(sp) # inside?
-		
+				
 		Pad0:
 			lw a1, 0(sp)
 			addi sp, sp, 4
@@ -696,8 +597,7 @@ L3:
 			lw a3, 0(sp)
 			addi sp, sp, 4
 			sw a1, 0(a4)
-			
-			
+				
 		
 		lw t2, 16(sp)
 		lw t3, 12(sp)
@@ -720,27 +620,19 @@ L3:
 
 
 	addi a0, a0, -1 # update for1
-	#addi sp, sp, 4
-	#sw a1, 0(sp) # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized a1(sp)
-	#lw a1, 16(sp) # h/2^k
+	
 	bge a0, x0, For1
-	#bge a0, a1, ForLoop1 # if i >= h/2^k EXIT
-	#j ForExit1
 
-#ForLoop1:
-	#lw a1, 0(sp)
-	#addi sp, sp, 4
-	#j For1
-
-	# TODO: two lines need or not? may be executed in ForExit1 after not branch blt
-	#lw a1, 0(sp)
-	#addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 
 ForExit1:
-	
-	#lw a1, 0(sp)
-	#addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
-
-	
+	addi sp, sp, 20
+		
+	lw a0, 16(sp) #imgptr
+	lw a1, 12(sp) #h
+	lw a2, 8(sp) #w
+	lw a3, 4(sp) #k
+	lw a4, 0(sp) #outptr
+	addi sp, sp, 20 # restore initial sp and arguments
+	 
 	ret
 
