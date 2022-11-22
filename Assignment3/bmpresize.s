@@ -66,12 +66,21 @@ bmpresize:
 	mv t1, t3 # w*3
 	srli t1, t1, 2 # w*3 / 4
 	slli t1, t1, 2 # t1 = w*3 / 4 * 4
-	sub t2, t0, t1 # t2 = w*3 % 4
+
+	#ebreak
+	sub t2, t3, t1 # t2 = w*3 % 4
+
+	
+
+
 	beq t2, x0, L1 # w_bytes = 3*w if 3*w % 4 == 0
 	addi t3, t1, 4 # else ((3*w)/4) * 4 + 4 : t1 + 4
 
 
+
+
 L1:
+	
 	addi sp, sp, -4
 	sw t3, 0(sp)
 	# imgptr h w k outptr scaling_factor h/2^k w/2^k w_bytes(sp)
