@@ -1,0 +1,114 @@
+add    t0, t0, a1 
+avg ++ value
+
+1721 0
+2271 53
+3096 0 ->Err -> locate compute missing -?
+3679 53
+
+106
+
+5329
+5879
+6704
+7287
+
+8970
+9520
+10345
+10928
+
+13062
+13612
+14558
+15141
+
+16978
+17528
+
+
+srl t0, t0, t4 # avg /= (scaling_factor * scaling_factor);
+3822
+
+- compute locate - 
+
+260 0x8000029c: add    t1, t1, a0             # R[6] <- 0x00000000, pc_next=0x800002a0
+m * w_bytes + n+x => m=1 이므로 locate = 0이면 안됨
+=> w_bytes = 0 으로 잘못 계산된 것 확인
+
+- locate - 
+0 3 16 19
+
+=> 0 3 20 23 : 1*20 +0+0 / 1*20 + 3+ 0
+
+=> w_bytes = 16 으로 잘못 계산된 것 확인 - 수정 완료 :3*w 해야 하는데, 2*w가 되고 있었음,
+
+----------------------------------
+ test case 5: 
+  .word 0x27bcb527
+  .word 0x0000bcb5
+  .word 0x00000000
+  .word 0x2a000000
+  .word 0x1a02fad0
+  .word 0x0000003e
+에서 0x00000000만 쏙 빼고 답이 나옴
+  .word 0x27bcb527
+  .word 0x0000bcb5
+  .word 0x2a000000
+  .word 0x1a02fad0
+  .word 0x0000003e
+  
+  test case 2: 0x00040302 (1줄짜리 ans)는 맞게 나오는데, 이후 END의 0xdeadbeef가 다르다고 함
+  이렇게
+   => zero - padding issue로 생각됨
+  
+  의심 정황
+  1) zero padding locate가 엉뚱
+  2) For1, For2가 야기하는 sp issue로 인해 locate가 엉뚱해짐
+  
+  => For 전후 lw, sw의 허점을 찾아 해결하거나
+  i, j를 0~h_r, 0~w_r이 아닌 h_r-1 ~0, i--로 바꾸고 x0와 비교해야 함
+  => 작업 시작 전 bmpresize copy.s 저장.
+  
+  => i, j 바꾸고, sp error 아래쪽에 1곳 있어 고쳤음
+  => 값이 안나옴. loop 내부에서 i, j 접근을 잘못한듯.
+  => locate_in 은 잘 되는 것 같고, locate_out이 문제..?
+(add) t2, t2, t0
+ 를 log에서 찾으면 avg가 write되는 순간을 추적할 수 있다
+ 
+ => 340줄 lw t1, 0(sp) # w_b_r 에 애초에 t1에 ffffffff가 들어감
+ 	==== > for loop i, j 변경하면서 stack에 save, restore하던 흔적 있었음
+ 	=> 고쳤으나 출력이 여전히 약간 다름
+ 	
+ 	
+ 	
+=> zero padding 수정ㅇ롼료
+
+
+w-bytes 계산 miss
+
+
+test case 3에서 12여야 하는데, 16으로 계산됨
+sub t2, t0, t1 # t2 = w*3 % 4 => 0이 아닌, underflow된 값이 저장된 것 확인
+=> sub t2, t3, t1 # t2 = w*3 % 4 로 변경
+
+=> PASSED (local)
+
+server
+Exception 'stack access error' occurred at 0x80000644 -- Program terminated
+Tests are aborted
+Test Error
+
+-> initial sp 기준으로, 0(sp) 사용 불가한가..? => 다시보니 원본 코드에도 딱히 문제 없는듯
+=> imem error가 local에서 나는 것 확인함
+=> 처음에 sp에 값 저장하느라 -40 해놓고 ret 직전에 안돌려줘서 오류 발생한듯
+
+ret 직전에 sp와 a0~a4 reg를 처음과 동일하게 되돌리는 code 추가. // a0 ~ a4는 굳이 되돌릴 필요 없을지도
+
+
+
+  
+  
+  
+
+
