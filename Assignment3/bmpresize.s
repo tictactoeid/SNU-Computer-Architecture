@@ -26,7 +26,14 @@
 
 	.globl bmpresize
 bmpresize:
-	
+	#lw t0, 0(a4)
+	#lw t1, 4(a4)
+	#lw t2, 8(a4)
+	#lw t3, 12(a4)
+	#lw t4, 16(a4)
+	#ebreak
+
+
 	addi sp, sp, -20
 	sw a0, 16(sp) #imgptr
 	sw a1, 12(sp) #h
@@ -628,9 +635,13 @@ L3:
 		#slli t2, a3, 1
 		#addi t2, t2, 2 # locate % 4 *2 +2
 
+		addi sp, sp, -4
+		sw a1, 0(sp)
+
+		
 		
 		beq a3, x0, Pad0
-		addi a1, x0, 1
+		addi a1, x0, 1 # a1: temp value
 		beq a3, a1, Pad1
 		addi a1, x0, 2
 		beq a3, a1, Pad2
@@ -640,21 +651,33 @@ L3:
 		#sw a3, 0(sp) # inside?
 		
 		Pad0:
+			lw a1, 0(sp)
+			addi sp, sp, 4
+
 			addi sp, sp, -4
 			sw a3, 0(sp)
 			li a3, 0xFFFFFF00
 			j PadEnd
 		Pad1:
+			lw a1, 0(sp)
+			addi sp, sp, 4
+
 			addi sp, sp, -4
 			sw a3, 0(sp)
 			li a3, 0xFFFF00FF
 			j PadEnd
 		Pad2:
+			lw a1, 0(sp)
+			addi sp, sp, 4
+
 			addi sp, sp, -4
 			sw a3, 0(sp)
 			li a3, 0xFF00FFFF
 			j PadEnd
 		Pad3:
+			lw a1, 0(sp)
+			addi sp, sp, 4
+
 			addi sp, sp, -4
 			sw a3, 0(sp)
 			li a3, 0x00FFFFFF
@@ -664,6 +687,7 @@ L3:
 			lw a3, 0(sp)
 			addi sp, sp, 4
 			sw a1, 0(a4)
+			
 			
 		
 		lw t2, 16(sp)
@@ -708,6 +732,6 @@ ForExit1:
 	#lw a1, 0(sp)
 	#addi sp, sp, 4 # imgptr h w k outptr 2^k h/2^k w/2^k w_bytes w_bytes_resized(sp)
 
-
+	
 	ret
 
