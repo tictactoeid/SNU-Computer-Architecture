@@ -253,6 +253,7 @@ class ID(Pipe):
 
         rf_rs1_data, rf_rs2_data = Pipe.cpu.rf.read(self.rs1, self.rs2)
 
+
         #self.sp, dummy  = Pipe.cpu.rf.read(2, 1) # TODO: structural hazard?
 
 
@@ -278,9 +279,6 @@ class ID(Pipe):
                   Pipe.WB.wbdata  if Pipe.CTL.fwd_sp == FWD_WB       else \
                   Pipe.cpu.rf.read(2, 2)[0]
 
-        print(self.sp)
-        #print(dummy)
-
         # Determine ALU operand 2: R[rs2] or immediate values
         alu_op2 =       rf_rs2_data     if Pipe.CTL.op2_sel == OP2_RS2      else \
                         imm_i           if Pipe.CTL.op2_sel == OP2_IMI      else \
@@ -295,17 +293,17 @@ class ID(Pipe):
         # Get forwarded value for rs1 if necessary
         # The order matters: EX -> MM -> WB (forwarding from the closest stage)
         self.op1_data = self.pc         if Pipe.CTL.op1_sel == OP1_PC       else \
-                        Pipe.EX.alu_out if Pipe.CTL.fwd_op1 == FWD_EX       else \
-                        Pipe.MM.wbdata  if Pipe.CTL.fwd_op1 == FWD_MM       else \
-                        Pipe.WB.wbdata  if Pipe.CTL.fwd_op1 == FWD_WB       else \
                         self.sp         if Pipe.CTL.op1_sel == OP1_SP       else \
+                        Pipe.EX.alu_out if Pipe.CTL.fwd_op1 == FWD_EX       else \
+                        Pipe.MM.wbdata2  if Pipe.CTL.fwd_op1 == FWD_MM       else \
+                        Pipe.WB.wbdata2  if Pipe.CTL.fwd_op1 == FWD_WB       else \
                         rf_rs1_data
 
         # Get forwarded value for rs2 if necessary
         # The order matters: EX -> MM -> WB (forwarding from the closest stage)
         self.op2_data = Pipe.EX.alu_out if Pipe.CTL.fwd_op2 == FWD_EX       else \
-                        Pipe.MM.wbdata  if Pipe.CTL.fwd_op2 == FWD_MM       else \
-                        Pipe.WB.wbdata  if Pipe.CTL.fwd_op2 == FWD_WB       else \
+                        Pipe.MM.wbdata2  if Pipe.CTL.fwd_op2 == FWD_MM       else \
+                        Pipe.WB.wbdata2  if Pipe.CTL.fwd_op2 == FWD_WB       else \
                         alu_op2
 
         # Get forwarded value for rs2 if necessary
@@ -313,10 +311,17 @@ class ID(Pipe):
         # For sw and branch instructions, we need to carry R[rs2] as well
         # -- in these instructions, op2_data will hold an immediate value
         self.rs2_data = Pipe.EX.alu_out if Pipe.CTL.fwd_rs2 == FWD_EX       else \
-                        Pipe.MM.wbdata  if Pipe.CTL.fwd_rs2 == FWD_MM       else \
-                        Pipe.WB.wbdata  if Pipe.CTL.fwd_rs2 == FWD_WB       else \
+                        Pipe.MM.wbdata2  if Pipe.CTL.fwd_rs2 == FWD_MM       else \
+                        Pipe.WB.wbdata2  if Pipe.CTL.fwd_rs2 == FWD_WB       else \
                         rf_rs2_data
 
+        # new hazard
+        # forward wbdata2 instead of wbdata
+        # wbdata is sp, and wbdata2 is the real rs2 value when MM or WB is POP instruction
+        # otherwise, wbdata == wbdata2
+
+        # however, we should forward wbdata for sp
+        # TODO: how about op1 or op2?
 
     def update(self):
 
@@ -444,8 +449,6 @@ class EX(Pipe):
         
         # Perform ALU operation
         self.alu_out = Pipe.cpu.alu.op(self.c_alu_fun, self.op1_data, self.alu2_data)
-        #print(self.op1_data, self.alu2_data)
-        #print(self.alu_out)
 
         # Adjust the output for jalr instruction (forwarded to IF)
         self.jump_reg_target    = self.alu_out & WORD(0xfffffffe) 
@@ -570,19 +573,10 @@ class MM(Pipe):
         self.sp             = MM.reg_sp
         self.c_dmem_addr_sel= MM.reg_c_dmem_addr_sel
 
-        print(self.sp)
-
         # Access data memory (dmem) if needed
         mem_data, status = Pipe.cpu.dmem.access(self.c_dmem_en, self.alu_out, self.rs2_data, self.c_dmem_rw) if self.c_dmem_addr_sel == MAD_ALU   else \
                            Pipe.cpu.dmem.access(self.c_dmem_en, self.sp, self.rs2_data, self.c_dmem_rw)    # if self.c_dmem_addr_sel == MAD_SP
 
-        if self.c_dmem_addr_sel == MAD_SP:
-            print("POP")
-            print(status)
-            print(self.sp)
-        else:
-            print("HI")
-            print(status)
 
         # TODO: POP causes DMEM err here => sp not forwarded
 
@@ -594,14 +588,16 @@ class MM(Pipe):
         # For load instruction, we need to store the value read from dmem
         if (self.c_wb_sel == WB_MEM):
             self.wbdata = mem_data
-            self.wbdata2 = 0 # dummy
+            self.wbdata2 = mem_data # dummy
         elif (self.c_wb_sel == WB_POP): # modified for POP
-            self.wbdata = mem_data      # loaded from memory -> rd
-            self.wbdata2 = self.alu_out # sp+4               -> sp
+            #self.wbdata = mem_data      # loaded from memory -> rd
+            #self.wbdata2 = self.alu_out # sp+4               -> sp
             # TODO
+            self.wbdata = self.alu_out
+            self.wbdata2 = mem_data
         else:
             self.wbdata = self.alu_out
-            self.wbdata2 = 0 # dummy
+            self.wbdata2 = self.alu_out # dummy
 
         # self.wbdata         = mem_data          if self.c_wb_sel == WB_MEM  else \
         #                      self.alu_out
@@ -675,20 +671,15 @@ class WB(Pipe):
 
         if self.c_rf_wen:
             if self.c_wb_sel == WB_POP:
-                print("WB_POP")
-                print(self.rd)
-                print(self.sp)
-                Pipe.cpu.rf.write(self.rd, self.wbdata, SP_RF_INDEX, self.wbdata2)
+                Pipe.cpu.rf.write(SP_RF_INDEX, self.wbdata, self.rd, self.wbdata2)
                 #TODO
             elif self.c_wb_sel == WB_SP: # TODO: Problematic at custom.s
-                # Control signal을 Pipe.CTL에서 접근하지 말고 pipeline reg에서 접근해야 ?
                 Pipe.cpu.rf.write(SP_RF_INDEX, self.wbdata)
             else:
                 Pipe.cpu.rf.write(self.rd, self.wbdata)
 
 
         Pipe.log(S_WB, self.pc, self.inst, self.log())
-        #print(self.inst == BUBBLE)
 
         if (self.exception):
             return False
@@ -828,19 +819,44 @@ class Control(object):
 
         # TODO
 
-        self.fwd_sp         =   FWD_EX      if (EX.reg_rd == SP_RF_INDEX) and sp_oen and   \
-                                               (EX.reg_rd != 0) and EX.reg_c_rf_wen  else   \
+        #self.fwd_sp         =   FWD_EX      if (EX.reg_rd == SP_RF_INDEX) and sp_oen and   \
+        #                                       (EX.reg_rd != 0) and EX.reg_c_rf_wen  else   \
+        #                        FWD_MM      if (MM.reg_rd == SP_RF_INDEX) and sp_oen and   \
+        #                                       (MM.reg_rd != 0) and Pipe.MM.c_rf_wen else   \
+        #                        FWD_WB      if (WB.reg_rd == SP_RF_INDEX) and sp_oen and   \
+        #                                       (WB.reg_rd != 0) and WB.reg_c_rf_wen  else   \
+        #                        FWD_NONE
+
+        self.fwd_sp         =   FWD_EX      if (EX.reg_c_wb_sel == WB_POP or EX.reg_c_wb_sel == WB_SP) and sp_oen and   \
+                                               EX.reg_c_rf_wen  else   \
+                                FWD_EX      if (EX.reg_rd == SP_RF_INDEX) and sp_oen and \
+                                               (EX.reg_rd != 0) and EX.reg_c_rf_wen else \
+                                FWD_MM      if (MM.reg_c_wb_sel == WB_POP or MM.reg_c_wb_sel == WB_SP) and sp_oen and   \
+                                               Pipe.MM.c_rf_wen else   \
                                 FWD_MM      if (MM.reg_rd == SP_RF_INDEX) and sp_oen and   \
                                                (MM.reg_rd != 0) and Pipe.MM.c_rf_wen else   \
-                                FWD_WB      if (WB.reg_rd == SP_RF_INDEX) and sp_oen and   \
+                                FWD_WB      if (WB.reg_c_wb_sel == WB_POP or WB.reg_c_wb_sel == WB_SP) and sp_oen and   \
+                                               WB.reg_c_rf_wen  else \
+                                FWD_WB      if (WB.reg_rd == SP_RF_INDEX) and sp_oen and \
                                                (WB.reg_rd != 0) and WB.reg_c_rf_wen  else   \
                                 FWD_NONE
 
+        # first - sp forwarded from PUSH/POP
+        # check if EX/MM/WB stage instruction is POP or PUSH, instead of considering rd
+        # because we do not use rd as save address of ALU output
+
+        # second - sp forwarded from other instructions such as LUI
+        # just consider rd just like rs1/rs2 forwarding
+
+
+
         # Check for load-use data hazard
-        EX_load_inst = EX.reg_c_dmem_en and EX.reg_c_dmem_rw == M_XRD
-        load_use_hazard     = (EX_load_inst and EX.reg_rd != 0) and             \
-                              ((EX.reg_rd == Pipe.ID.rs1 and rs1_oen) or        \
-                               (EX.reg_rd == Pipe.ID.rs2 and rs2_oen))
+        EX_load_inst = EX.reg_c_dmem_en and EX.reg_c_dmem_rw == M_XRD # check if EX is load instruction or not
+        load_use_hazard     = ((EX_load_inst and EX.reg_rd != 0) and             \
+                              ((EX.reg_rd == Pipe.ID.rs1 and rs1_oen) or         \
+                               (EX.reg_rd == Pipe.ID.rs2 and rs2_oen)))
+        # pop : load, rd
+        # push : use, rs2
 
         # Check for mispredicted branch/jump
         EX_brjmp            = self.pc_sel != PC_4
