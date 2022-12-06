@@ -1,0 +1,4 @@
+cd asm/
+make
+cd ../
+./snurisc5.py -l 4 -b 7 asm/ex1
