@@ -60,3 +60,5 @@ Assignment3/C/.idea/
 Assignment3/C/cmake-build-debug
 Assignment3/C/CMakeLists.txt
 Assignment2/CMakeLists.txt
+Assignment4/__pycache__/
+Assignment4/.idea/

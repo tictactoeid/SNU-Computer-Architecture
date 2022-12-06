@@ -43,9 +43,7 @@ _start:                         # code entry point
     nop
     nop
     nop
-    nop
-    nop
-    #pop     t1
+    pop     t1
     ebreak
     
 
