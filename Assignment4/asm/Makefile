@@ -72,7 +72,11 @@ ex3: ex3.o
 
 ex4: ex4.o
 	$(CC) $(LDFLAGS) -o $@ $< $(LIBDIR) $(LIBS)
-	$(OBJDUMP) $(OBJDFLAGS) $@ > $@.objdump    
+	$(OBJDUMP) $(OBJDFLAGS) $@ > $@.objdump
+
+custom: custom.o
+	$(CC) $(LDFLAGS) -o $@ $< $(LIBDIR) $(LIBS)
+	$(OBJDUMP) $(OBJDFLAGS) $@ > $@.objdump
 
 .s.o:
 	$(CC) -c $(CFLAGS) $(INCDIR) $< -o $@

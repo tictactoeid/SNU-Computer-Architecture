@@ -339,12 +339,20 @@ class ID(Pipe):
             self.inst = BUBBLE
 
         # TODO: forward sp
+        # TODO: forwarding logic is problematic with lw
+        # push -> lw forwarding does not working
 
         # The order matters: EX -> MM -> WB (forwarding from the closest stage)
         self.sp = Pipe.EX.alu_out if Pipe.CTL.fwd_sp == FWD_EX       else \
                   Pipe.MM.wbdata  if Pipe.CTL.fwd_sp == FWD_MM       else \
                   Pipe.WB.wbdata  if Pipe.CTL.fwd_sp == FWD_WB       else \
                   Pipe.cpu.rf.read(2, 2)[0]
+        if Pipe.CTL.fwd_sp == FWD_EX:
+            print("forwarded sp from EX")
+        if Pipe.CTL.fwd_sp == FWD_MM:
+            print("forwarded sp from MM")
+        if Pipe.CTL.fwd_sp == FWD_WB:
+            print("forwarded sp from WB")
 
         # Determine ALU operand 2: R[rs2] or immediate values
         alu_op2 =       rf_rs2_data     if Pipe.CTL.op2_sel == OP2_RS2      else \
