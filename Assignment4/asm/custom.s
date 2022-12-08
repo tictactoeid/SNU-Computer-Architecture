@@ -26,24 +26,8 @@ _start:                         # code entry point
     addi    t0, x0, 1
     addi    t1, x0, 2
     addi    t2, x0, 3
-    push    t0
-    nop
-    nop
-    nop
-    nop
-    nop
-    push    t1
-    nop
-    nop
-    nop
-    nop
-    nop
-    push    t2
-    nop
-    nop
-    nop
-    nop
-    pop     t1
+    addi    t3, t2, 4
+    add     t4, t3, t2
     ebreak
     
 

@@ -3,7 +3,7 @@
 #   Project #4: Extending a 5-stage Pipelined RISC-V Processor
 #
 #   November 28, 2022
-# 
+#
 #   Seongyeop Jeong (seongyeop.jeong@snu.ac.kr)
 #   Jaehoon Shim (mattjs@snu.ac.kr)
 #   IlKueon Kang (kangilkueon@snu.ac.kr)
@@ -30,21 +30,37 @@ from pipe import *
 
 class BTB(object):
 
-    def __init__(self, k):
-        self.k = k
-        # initialize your BTB here
+    def __init__(self, k): # initialize your BTB here
+        self.k = k # size = 2**k
+        self.N = 2**k
+        self.buffer = np.zeros((self.N, 3), int)
+        # [Valid, Tag, Target Address]
+        # N = 2**k entries
 
     # Lookup the entry corresponding to the pc
     # It will return the target address if there is a matching entry
     def lookup(self, pc):
-        return 0
+        index = (pc>>2) % self.N
+        tag = pc >> (self.k + 2)
+        if self.buffer[index, 0] == 1 and self.buffer[index, 1] == tag:
+            return self.buffer[index, 2]
+        return False
 
-    # Add an entry 
+    # Add an entry
     def add(self, pc, target):
+        index = (pc >> 2) % self.N
+        tag = pc >> (self.k + 2)
+        self.buffer[index, 0] = 1 # valid
+        self.buffer[index, 1] = tag
+        self.buffer[index, 2] = target
         return
 
     # Make the corresponding entry invalid
     def remove(self, pc):
+        index = (pc >> 2) % self.N
+        tag = pc >> (self.k + 2)
+        if self.buffer[index, 1] == tag: # entry exists
+            self.buffer[index, 0] = 0 # make it invalid
         return
 
 
@@ -128,10 +144,14 @@ csignals = {
 
 class IF(Pipe):
 
+    # TODO: IF에 branch가 올 경우 predict한 값을 pipe reg로 가지고 있도록 수
+
     # Pipeline registers ------------------------------
 
     reg_pc          = WORD(0)       # IF.reg_pc
     reg_sp          = WORD(0)       # IF.reg_sp
+
+    reg_br_pred_addr = WORD(0)
 
     #--------------------------------------------------
 
@@ -147,12 +167,16 @@ class IF(Pipe):
         #   self.pc_next            # Pipe.IF.pc_next
         #   self.pcplus4            # Pipe.IF.pcplus4
         #
+        #   self.br_pred_addr
         #----------------------------------------------
 
     def compute(self):
+        # Readout pipeline register values
+        #if not Pipe.CTL.EX_mispredicted:
+        self.pc = IF.reg_pc
+        #else:
+            #self.pc = Pipe.EX.br_true_addr
 
-        # Readout pipeline register values 
-        self.pc     = IF.reg_pc
 
         # Fetch an instruction from instruction memory (imem)
         self.inst, status = Pipe.cpu.imem.access(Pipe.CTL.imem_en, self.pc, 0, Pipe.CTL.imem_rw)
@@ -168,20 +192,60 @@ class IF(Pipe):
         self.pcplus4 = Pipe.cpu.adder_pcplus4.op(self.pc, 4)
 
         # Select next PC
-        self.pc_next =  self.pcplus4            if Pipe.CTL.pc_sel == PC_4      else \
-                        Pipe.EX.brjmp_target    if Pipe.CTL.pc_sel == PC_BRJMP  else \
-                        Pipe.EX.jump_reg_target if Pipe.CTL.pc_sel == PC_JALR   else \
-                        WORD(0)                 
+        # TODO: lookup BTB
 
+        if not Pipe.cpu.btb.lookup(self.pc):
+            # IF stage instruction is not a branch instruction
+            # or BTB predicts not-taken
+            # this must be executed after update BTB in EX stage
+            self.pc_next =  self.pcplus4            if Pipe.CTL.pc_sel == PC_4      else \
+                            Pipe.EX.brjmp_target    if Pipe.CTL.pc_sel == PC_BRJMP  else \
+                            Pipe.EX.jump_reg_target if Pipe.CTL.pc_sel == PC_JALR   else \
+                            WORD(0)
+            self.br_pred_addr = None
+            # Pipe.CTL.pc_sel == PC_BRJMP, Pipe.CTL.pc_sel == PC_JAL
+            # when branch is in EX stage, next pc will become computed (from EX) branch target
+            # and makes bubble IF->ID, ID->EX instructions: Control() does
+
+        else: # when branch is in IF stage, and BTB matches
+            # TODO: mis-fetched
+            self.pc_next = Pipe.cpu.btb.lookup(self.pc)
+            self.br_pred_addr = self.pc_next
+            # this may change in EX.update() if mis-predicted
+
+            #self.pc_next =  Pipe.cpu.btb.lookup(self.pc) if Pipe.CTL.pc_sel == Pipe.cpu.btb.lookup(self.pc)      else \
+            #                self.pcplus4                 if Pipe.CTL.pc_sel == PC_4                              else \
+            #                Pipe.EX.brjmp_target         if Pipe.CTL.pc_sel == PC_BRJMP                          else \
+            #                Pipe.EX.jump_reg_target      if Pipe.CTL.pc_sel == PC_JALR                           else \
+            #                WORD(0)
+            #Pipe.EX.brjmp_target         if Pipe.CTL.pc_sel == PC_BRJMP  else \
+                           #Pipe.EX.jump_reg_target      if Pipe.CTL.pc_sel == PC_JALR   else \
+                           #Pipe.cpu.btb.lookup(self.pc) if Pipe.CTL.pc_sel == Pipe.cpu.btb.lookup(Pipe.EX.pc) else \
+                           #self.pcplus4                 #if Pipe.CTL.pc_sel == PC_4 else \
+                           #WORD(0)
+
+
+
+            #if (Pipe.EX.c_br_type == BR_N):
+            #    EX_brjmp = False
+            #elif not Pipe.cpu.btb.lookup(Pipe.EX.pc):  # btb entry empty
+             #   EX_brjmp = self.pc_sel != PC_4
+            #else:  # predicted something else
+             #   EX_brjmp = self.pc_sel != Pipe.cpu.btb.lookup(Pipe.EX.pc)
+
+
+
+                # Control() makes bubble misfetched instructions
 
     def update(self):
 
         if not Pipe.CTL.IF_stall:
             IF.reg_pc           = self.pc_next
+            ID.reg_br_pred_addr     = self.br_pred_addr
 
         if (Pipe.CTL.ID_bubble and Pipe.CTL.ID_stall):
             sys.exit(1)
-        
+
         if Pipe.CTL.ID_bubble:
             ID.reg_pc           = self.pc
             ID.reg_inst         = WORD(BUBBLE)
@@ -214,6 +278,7 @@ class ID(Pipe):
     reg_inst        = WORD(BUBBLE)      # ID.reg_inst
     reg_exception   = WORD(EXC_NONE)    # ID.reg_exception
     reg_pcplus4     = WORD(0)           # ID.reg_pcplus4
+    reg_br_pred_addr = WORD(0)
 
     #--------------------------------------------------
 
@@ -246,6 +311,8 @@ class ID(Pipe):
         self.inst       = ID.reg_inst
         self.exception  = ID.reg_exception
         self.pcplus4    = ID.reg_pcplus4
+
+        self.br_pred_addr = ID.reg_br_pred_addr
 
         self.rs1        = RISCV.rs1(self.inst)          # for CTL (forwarding check)
         self.rs2        = RISCV.rs2(self.inst)          # for CTL (forwarding check)
@@ -323,6 +390,7 @@ class ID(Pipe):
         # however, we should forward wbdata for sp
         # TODO: how about op1 or op2?
 
+
     def update(self):
 
         EX.reg_pc                   = self.pc
@@ -351,6 +419,7 @@ class ID(Pipe):
 
             EX.reg_sp               = self.sp
             EX.reg_c_dmem_addr_sel  = Pipe.CTL.dmem_addr_sel
+            EX.reg_br_pred_addr     = self.br_pred_addr
 
         Pipe.log(S_ID, self.pc, self.inst, self.log())
 
@@ -386,6 +455,8 @@ class EX(Pipe):
 
     reg_sp              = WORD(0)
     reg_c_dmem_addr_sel = WORD(MAD_ALU)
+    reg_br_pred_addr    = WORD(0)
+    reg_br_true_addr    = WORD(0)
 
     #--------------------------------------------------
 
@@ -416,6 +487,7 @@ class EX(Pipe):
         #   self.jump_reg_target    # Pipe.EX.jump_reg_target
         #
         #   self.sp
+        #
         #----------------------------------------------
 
 
@@ -439,6 +511,8 @@ class EX(Pipe):
 
         self.sp                 = EX.reg_sp
         self.c_dmem_addr_sel    = EX.reg_c_dmem_addr_sel
+        self.br_pred_addr   = EX.reg_br_pred_addr
+
 
 
         # For branch instructions, we use ALU to make comparisons between rs1 and rs2.
@@ -446,22 +520,46 @@ class EX(Pipe):
         # we change the input of ALU to rs2_data.
         self.alu2_data  = self.rs2_data     if self.c_br_type in [ BR_NE, BR_EQ, BR_GE, BR_GEU, BR_LT, BR_LTU ] else \
                           self.op2_data
-        
+
         # Perform ALU operation
         self.alu_out = Pipe.cpu.alu.op(self.c_alu_fun, self.op1_data, self.alu2_data)
 
         # Adjust the output for jalr instruction (forwarded to IF)
-        self.jump_reg_target    = self.alu_out & WORD(0xfffffffe) 
+        self.jump_reg_target    = self.alu_out & WORD(0xfffffffe)
 
         # Calculate the branch/jump target address using an adder (forwarded to IF)
-        self.brjmp_target       = Pipe.cpu.adder_brtarget.op(self.pc, self.op2_data) 
+        self.brjmp_target       = Pipe.cpu.adder_brtarget.op(self.pc, self.op2_data)
 
         # For jal and jalr instructions, pc+4 should be written to the rd
-        if self.c_wb_sel == WB_PC4:                   
+        if self.c_wb_sel == WB_PC4:
             self.alu_out        = self.pcplus4
 
-
     def update(self):
+
+        # TODO: update BTB
+        self.br_true_addr = self.pcplus4 # dummy when well-predicted or none-branch inst.
+        if self.c_br_type != BR_N:
+            #if (true_address) != self.br_pred_addr  :
+            # wrong prediction
+
+            if Pipe.CTL.pc_sel == PC_BRJMP and self.br_pred_addr != self.brjmp_target: # update if branch taken
+                Pipe.cpu.btb.add(self.pc, self.brjmp_target)
+                #self.br_true_addr = self.brjmp_target
+                IF.reg_pc = self.brjmp_target
+                #Pipe.IF.pc_next = self.brjmp_target
+            elif Pipe.CTL.pc_sel == PC_JALR and self.br_pred_addr != self.jump_reg_target:
+                Pipe.cpu.btb.add(self.pc, self.jump_reg_target)
+                #self.br_true_addr = self.jump_reg_target
+                IF.reg_pc = self.jump_reg_target
+                #Pipe.IF.pc_next = self.jump_reg_target
+            elif Pipe.CTL.pc_sel == PC_4 and self.br_pred_addr != self.pcplus4: # branch not taken
+                Pipe.cpu.btb.remove(self.pc)
+                #self.br_true_addr = self.pcplus4
+                IF.reg_pc = self.pcplus4
+
+
+        # TODO: change next fetch target in IF stage when mispredicted
+
 
         MM.reg_pc                   = self.pc
         # Exception should not be cleared in MM even if MM_bubble is enabled.
@@ -485,6 +583,7 @@ class EX(Pipe):
             MM.reg_rs2_data         = self.rs2_data
             MM.reg_sp               = self.sp
             MM.reg_c_dmem_addr_sel  = self.c_dmem_addr_sel
+            #MM.reg_br_pred_addr     = self.br_pred_addr
 
         Pipe.log(S_EX, self.pc, self.inst, self.log())
 
@@ -531,6 +630,7 @@ class MM(Pipe):
 
     reg_sp              = WORD(0)
     reg_c_dmem_addr_sel = WORD(MAD_ALU)
+    #reg_br_pred_addr    = WORD(0)
 
     #--------------------------------------------------
 
@@ -567,11 +667,12 @@ class MM(Pipe):
         self.c_wb_sel       = MM.reg_c_wb_sel
         self.c_dmem_en      = MM.reg_c_dmem_en
         self.c_dmem_rw      = MM.reg_c_dmem_rw
-        self.alu_out        = MM.reg_alu_out  
+        self.alu_out        = MM.reg_alu_out
         self.rs2_data       = MM.reg_rs2_data
 
         self.sp             = MM.reg_sp
         self.c_dmem_addr_sel= MM.reg_c_dmem_addr_sel
+        #self.br_pred_addr   = MM.reg_br_pred_addr
 
         # Access data memory (dmem) if needed
         mem_data, status = Pipe.cpu.dmem.access(self.c_dmem_en, self.alu_out, self.rs2_data, self.c_dmem_rw) if self.c_dmem_addr_sel == MAD_ALU   else \
@@ -604,7 +705,7 @@ class MM(Pipe):
 
 
     def update(self):
-    
+
         WB.reg_pc           = self.pc
         WB.reg_inst         = self.inst
         WB.reg_exception    = self.exception
@@ -656,11 +757,11 @@ class WB(Pipe):
     def compute(self):
 
         # Readout pipeline register values
-        self.pc                 = WB.reg_pc    
-        self.inst               = WB.reg_inst  
-        self.exception          = WB.reg_exception      
-        self.rd                 = WB.reg_rd    
-        self.c_rf_wen           = WB.reg_c_rf_wen 
+        self.pc                 = WB.reg_pc
+        self.inst               = WB.reg_inst
+        self.exception          = WB.reg_exception
+        self.rd                 = WB.reg_rd
+        self.c_rf_wen           = WB.reg_c_rf_wen
         self.wbdata             = WB.reg_wbdata
 
         self.sp                 = WB.reg_sp
@@ -754,7 +855,7 @@ class Control(object):
         self.ID_stall       = False
         self.ID_bubble      = False
         self.EX_bubble      = False
-        self.MM_bubble      = False     
+        self.MM_bubble      = False
 
         cs = csignals[opcode]
 
@@ -859,22 +960,42 @@ class Control(object):
         # push : use, rs2
 
         # Check for mispredicted branch/jump
-        EX_brjmp            = self.pc_sel != PC_4
+        # TODO: mispredict logic
+        # this executed before update BTB
+        #EX_brjmp            = self.pc_sel != PC_4
+        if (Pipe.EX.c_br_type == BR_N):
+            EX_brjmp = False
+        elif not Pipe.cpu.btb.lookup(Pipe.EX.pc): # btb entry empty
+            EX_brjmp = self.pc_sel != PC_4
+        else: # predicted something else
+            # EX_brjmp = (true_address) != EX.reg_br_pred_addr
+            if (self.pc_sel == PC_BRJMP):
+                EX_brjmp = Pipe.EX.brjmp_target != EX.reg_br_pred_addr
+            elif (self.pc_sel == PC_JALR):
+                EX_brjmp = Pipe.EX.jump_reg_target != EX.reg_br_pred_addr
+            else:
+                EX_brjmp = Pipe.EX.pcplus4 != EX.reg_br_pred_addr
+        self.EX_mispredicted = EX_brjmp
+
+                       #Pipe.cpu.btb.lookup(Pipe.EX.pc)
+
+        # self.pc_sel: branch outcome
+        # PC_4: predicted branch outcome (Always-not-Taken)
 
         # For load-use hazard, ID and IF are stalled for one cycle (and EX bubbled)
         # For mispredicted branches, instructions in ID and IF should be cancelled (become BUBBLE)
-        self.IF_stall       = load_use_hazard 
+        self.IF_stall       = load_use_hazard
         self.ID_stall       = load_use_hazard
-        self.ID_bubble      = EX_brjmp 
+        self.ID_bubble      = EX_brjmp
         self.EX_bubble      = load_use_hazard or EX_brjmp
 
-        # Any instruction with an exception becomes BUBBLE as it enters the MM stage. 
-        # This is because the instruction can be cancelled while it is in IF and ID due to mispredicted 
-        # branch/jump, in which case it should not cause any exception. We just keep track of the exception 
-        # state with the instruction along the pipeline until EX. If the instruction survives EX, it is 
+        # Any instruction with an exception becomes BUBBLE as it enters the MM stage.
+        # This is because the instruction can be cancelled while it is in IF and ID due to mispredicted
+        # branch/jump, in which case it should not cause any exception. We just keep track of the exception
+        # state with the instruction along the pipeline until EX. If the instruction survives EX, it is
         # safe to make the instruction and any following instructions bubble (except for EBREAK)
         self.MM_bubble = (Pipe.EX.exception and (Pipe.EX.exception != EXC_EBREAK)) or (Pipe.MM.exception)
-       
+
         if inst == BUBBLE:
             return False
         else:
