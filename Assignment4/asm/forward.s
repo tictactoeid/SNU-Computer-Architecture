@@ -24,10 +24,10 @@ _start:                         # code entry point
     li      t0, 1
     li      t1, 2
     li      t2, 3
-    add     x31, x31, t2
-    add     x31, x31, t2
-    add     x31, x31, t1
-    add     x31, x31, t0
+    add     x31, x31, t2 # 3
+    add     x31, x31, t2 # 6
+    add     x31, x31, t1 # 8
+    add     x31, x31, t0 # 9
     ebreak
 
 

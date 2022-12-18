@@ -71,7 +71,7 @@ class BTB(object):
 
 #--------------------------------------------------------------------------
 # constants for additional control signals
-SP_RF_INDEX = 2
+SP_RF_INDEX = 2           # sp = RegisterFile[2]
 
 OP1_SP = 3                # sp (stack pointer) as ALU operand 1
 OP2_4 = 6                 # Immediate 4 as ALU operand 2
@@ -192,7 +192,7 @@ class IF(Pipe):
         self.pcplus4 = Pipe.cpu.adder_pcplus4.op(self.pc, 4)
 
         # Select next PC
-        # TODO: lookup BTB
+        # TODO: jalr -> next fetching problematic
 
         if not Pipe.cpu.btb.lookup(self.pc):
             # IF stage instruction is not a branch instruction
@@ -347,12 +347,6 @@ class ID(Pipe):
                   Pipe.MM.wbdata  if Pipe.CTL.fwd_sp == FWD_MM       else \
                   Pipe.WB.wbdata  if Pipe.CTL.fwd_sp == FWD_WB       else \
                   Pipe.cpu.rf.read(2, 2)[0]
-        if Pipe.CTL.fwd_sp == FWD_EX:
-            print("forwarded sp from EX")
-        if Pipe.CTL.fwd_sp == FWD_MM:
-            print("forwarded sp from MM")
-        if Pipe.CTL.fwd_sp == FWD_WB:
-            print("forwarded sp from WB")
 
         # Determine ALU operand 2: R[rs2] or immediate values
         alu_op2 =       rf_rs2_data     if Pipe.CTL.op2_sel == OP2_RS2      else \
@@ -367,18 +361,24 @@ class ID(Pipe):
         # Determine ALU operand 1: PC or R[rs1]
         # Get forwarded value for rs1 if necessary
         # The order matters: EX -> MM -> WB (forwarding from the closest stage)
+
+        # self.rs1 == SP_RF_INDEX : forward sp to lw/sw
+        # Pipe.CTL.op1_sel == OP1_SP : forward sp to push/pop
         self.op1_data = self.pc         if Pipe.CTL.op1_sel == OP1_PC       else \
                         self.sp         if Pipe.CTL.op1_sel == OP1_SP       else \
+                        self.sp         if self.rs1 == SP_RF_INDEX and Pipe.CTL.op1_sel == OP1_RS1 else \
                         Pipe.EX.alu_out if Pipe.CTL.fwd_op1 == FWD_EX       else \
-                        Pipe.MM.wbdata2  if Pipe.CTL.fwd_op1 == FWD_MM       else \
-                        Pipe.WB.wbdata2  if Pipe.CTL.fwd_op1 == FWD_WB       else \
+                        Pipe.MM.wbdata2 if Pipe.CTL.fwd_op1 == FWD_MM       else \
+                        Pipe.WB.wbdata2 if Pipe.CTL.fwd_op1 == FWD_WB       else \
                         rf_rs1_data
+        # cannot distinguish rs1 = sp(index 2) and imm 2 without Pipe.CTL.op1_sel == OP1_RS1
 
         # Get forwarded value for rs2 if necessary
         # The order matters: EX -> MM -> WB (forwarding from the closest stage)
-        self.op2_data = Pipe.EX.alu_out if Pipe.CTL.fwd_op2 == FWD_EX       else \
-                        Pipe.MM.wbdata2  if Pipe.CTL.fwd_op2 == FWD_MM       else \
-                        Pipe.WB.wbdata2  if Pipe.CTL.fwd_op2 == FWD_WB       else \
+        self.op2_data = self.sp         if self.rs2 == SP_RF_INDEX and Pipe.CTL.op2_sel == OP2_RS2 else \
+                        Pipe.EX.alu_out if Pipe.CTL.fwd_op2 == FWD_EX       else \
+                        Pipe.MM.wbdata2 if Pipe.CTL.fwd_op2 == FWD_MM       else \
+                        Pipe.WB.wbdata2 if Pipe.CTL.fwd_op2 == FWD_WB       else \
                         alu_op2
 
         # Get forwarded value for rs2 if necessary
@@ -546,7 +546,7 @@ class EX(Pipe):
 
         # TODO: update BTB
         self.br_true_addr = self.pcplus4 # dummy when well-predicted or none-branch inst.
-        if self.c_br_type != BR_N:
+        if self.c_br_type != BR_N and Pipe.CTL.EX_mispredicted:
             #if (true_address) != self.br_pred_addr  :
             # wrong prediction
 
@@ -555,10 +555,10 @@ class EX(Pipe):
                 #self.br_true_addr = self.brjmp_target
                 IF.reg_pc = self.brjmp_target
                 #Pipe.IF.pc_next = self.brjmp_target
-            elif Pipe.CTL.pc_sel == PC_JALR and self.br_pred_addr != self.jump_reg_target:
-                Pipe.cpu.btb.add(self.pc, self.jump_reg_target)
-                #self.br_true_addr = self.jump_reg_target
-                IF.reg_pc = self.jump_reg_target
+            #elif Pipe.CTL.pc_sel == PC_JALR and self.br_pred_addr != self.jump_reg_target:
+            #    Pipe.cpu.btb.add(self.pc, self.jump_reg_target)
+            #    #self.br_true_addr = self.jump_reg_target
+            #    IF.reg_pc = self.jump_reg_target
                 #Pipe.IF.pc_next = self.jump_reg_target
             elif Pipe.CTL.pc_sel == PC_4 and self.br_pred_addr != self.pcplus4: # branch not taken
                 Pipe.cpu.btb.remove(self.pc)
@@ -897,6 +897,7 @@ class Control(object):
         # Control signal for forwarding rs1 value to op1_data
         # The c_rf_wen signal can be disabled when we have an exception during dmem access,
         # so Pipe.MM.c_rf_wen should be used instead of MM.reg_c_rf_wen.
+        # TODO: make forward sp (push pop -> lw sw)
         self.fwd_op1        =   FWD_EX      if (EX.reg_rd == Pipe.ID.rs1) and rs1_oen and   \
                                                (EX.reg_rd != 0) and EX.reg_c_rf_wen else    \
                                 FWD_MM      if (MM.reg_rd == Pipe.ID.rs1) and rs1_oen and   \
@@ -928,28 +929,33 @@ class Control(object):
 
         # TODO
 
-        #self.fwd_sp         =   FWD_EX      if (EX.reg_rd == SP_RF_INDEX) and sp_oen and   \
-        #                                       (EX.reg_rd != 0) and EX.reg_c_rf_wen  else   \
-        #                        FWD_MM      if (MM.reg_rd == SP_RF_INDEX) and sp_oen and   \
-        #                                       (MM.reg_rd != 0) and Pipe.MM.c_rf_wen else   \
-        #                        FWD_WB      if (WB.reg_rd == SP_RF_INDEX) and sp_oen and   \
-        #                                       (WB.reg_rd != 0) and WB.reg_c_rf_wen  else   \
-        #                        FWD_NONE
-
-        self.fwd_sp         =   FWD_EX      if (EX.reg_c_wb_sel == WB_POP or EX.reg_c_wb_sel == WB_SP) and sp_oen and   \
+        self.fwd_sp         =   FWD_EX      if (EX.reg_c_wb_sel == WB_POP or EX.reg_c_wb_sel == WB_SP) and   \
                                                EX.reg_c_rf_wen  else   \
-                                FWD_EX      if (EX.reg_rd == SP_RF_INDEX) and sp_oen and \
+                                FWD_EX      if (EX.reg_rd == SP_RF_INDEX) and \
                                                (EX.reg_rd != 0) and EX.reg_c_rf_wen else \
-                                FWD_MM      if (MM.reg_c_wb_sel == WB_POP or MM.reg_c_wb_sel == WB_SP) and sp_oen and   \
+                                FWD_MM      if (MM.reg_c_wb_sel == WB_POP or MM.reg_c_wb_sel == WB_SP) and   \
                                                Pipe.MM.c_rf_wen else   \
-                                FWD_MM      if (MM.reg_rd == SP_RF_INDEX) and sp_oen and   \
+                                FWD_MM      if (MM.reg_rd == SP_RF_INDEX) and   \
                                                (MM.reg_rd != 0) and Pipe.MM.c_rf_wen else   \
-                                FWD_WB      if (WB.reg_c_wb_sel == WB_POP or WB.reg_c_wb_sel == WB_SP) and sp_oen and   \
+                                FWD_WB      if (WB.reg_c_wb_sel == WB_POP or WB.reg_c_wb_sel == WB_SP) and   \
                                                WB.reg_c_rf_wen  else \
-                                FWD_WB      if (WB.reg_rd == SP_RF_INDEX) and sp_oen and \
+                                FWD_WB      if (WB.reg_rd == SP_RF_INDEX) and \
                                                (WB.reg_rd != 0) and WB.reg_c_rf_wen  else   \
                                 FWD_NONE
-
+        # removed sp_oen, because of lw/sw sp forwarding
+        #self.fwd_sp         =   FWD_EX      if (EX.reg_c_wb_sel == WB_POP or EX.reg_c_wb_sel == WB_SP) and sp_oen and   \
+        #                                       EX.reg_c_rf_wen  else   \
+        #                        FWD_EX      if (EX.reg_rd == SP_RF_INDEX) and sp_oen and \
+        #                                       (EX.reg_rd != 0) and EX.reg_c_rf_wen else \
+        #                        FWD_MM      if (MM.reg_c_wb_sel == WB_POP or MM.reg_c_wb_sel == WB_SP) and sp_oen and   \
+        #                                       Pipe.MM.c_rf_wen else   \
+        #                        FWD_MM      if (MM.reg_rd == SP_RF_INDEX) and sp_oen and   \
+        #                                       (MM.reg_rd != 0) and Pipe.MM.c_rf_wen else   \
+        #                        FWD_WB      if (WB.reg_c_wb_sel == WB_POP or WB.reg_c_wb_sel == WB_SP) and sp_oen and   \
+        #                                       WB.reg_c_rf_wen  else \
+         #                       FWD_WB      if (WB.reg_rd == SP_RF_INDEX) and sp_oen and \
+         #                                      (WB.reg_rd != 0) and WB.reg_c_rf_wen  else   \
+         #                       FWD_NONE
         # first - sp forwarded from PUSH/POP
         # check if EX/MM/WB stage instruction is POP or PUSH, instead of considering rd
         # because we do not use rd as save address of ALU output
@@ -979,8 +985,8 @@ class Control(object):
             # EX_brjmp = (true_address) != EX.reg_br_pred_addr
             if (self.pc_sel == PC_BRJMP):
                 EX_brjmp = Pipe.EX.brjmp_target != EX.reg_br_pred_addr
-            elif (self.pc_sel == PC_JALR):
-                EX_brjmp = Pipe.EX.jump_reg_target != EX.reg_br_pred_addr
+            #elif (self.pc_sel == PC_JALR):
+            #    EX_brjmp = Pipe.EX.jump_reg_target != EX.reg_br_pred_addr
             else:
                 EX_brjmp = Pipe.EX.pcplus4 != EX.reg_br_pred_addr
         self.EX_mispredicted = EX_brjmp
@@ -1008,5 +1014,4 @@ class Control(object):
             return False
         else:
             return True
-
 
