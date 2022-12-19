@@ -371,6 +371,8 @@ class ID(Pipe):
                         Pipe.MM.wbdata2 if Pipe.CTL.fwd_op1 == FWD_MM       else \
                         Pipe.WB.wbdata2 if Pipe.CTL.fwd_op1 == FWD_WB       else \
                         rf_rs1_data
+
+
         # cannot distinguish rs1 = sp(index 2) and imm 2 without Pipe.CTL.op1_sel == OP1_RS1
 
         # Get forwarded value for rs2 if necessary
@@ -385,9 +387,13 @@ class ID(Pipe):
         # The order matters: EX -> MM -> WB (forwarding from the closest stage)
         # For sw and branch instructions, we need to carry R[rs2] as well
         # -- in these instructions, op2_data will hold an immediate value
-        self.rs2_data = Pipe.EX.alu_out if Pipe.CTL.fwd_rs2 == FWD_EX       else \
-                        Pipe.MM.wbdata2  if Pipe.CTL.fwd_rs2 == FWD_MM       else \
-                        Pipe.WB.wbdata2  if Pipe.CTL.fwd_rs2 == FWD_WB       else \
+
+        # TODO: consider push sp -> push sp case
+        # just use Pipe.CTL.wb_sel == WB_SP because only PUSH instruction has that control signal
+        self.rs2_data = self.sp         if self.rs2 == SP_RF_INDEX and Pipe.CTL.wb_sel == WB_SP else \
+                        Pipe.EX.alu_out if Pipe.CTL.fwd_rs2 == FWD_EX       else \
+                        Pipe.MM.wbdata2 if Pipe.CTL.fwd_rs2 == FWD_MM       else \
+                        Pipe.WB.wbdata2 if Pipe.CTL.fwd_rs2 == FWD_WB       else \
                         rf_rs2_data
 
         # new hazard
@@ -919,6 +925,8 @@ class Control(object):
                                 FWD_NONE
 
         # Control signal for forwarding rs2 value to rs2_data
+        # TODO: push sp -> push sp forwarding
+        # push sp -> sp did not considered as rd register
         self.fwd_rs2        =   FWD_EX      if (EX.reg_rd == Pipe.ID.rs2) and rs2_oen and   \
                                                (EX.reg_rd != 0) and EX.reg_c_rf_wen  else   \
                                 FWD_MM      if (MM.reg_rd == Pipe.ID.rs2) and rs2_oen and   \
@@ -926,8 +934,6 @@ class Control(object):
                                 FWD_WB      if (WB.reg_rd == Pipe.ID.rs2) and rs2_oen and   \
                                                (WB.reg_rd != 0) and WB.reg_c_rf_wen  else   \
                                 FWD_NONE
-
-        # TODO
 
         self.fwd_sp         =   FWD_EX      if (EX.reg_c_wb_sel == WB_POP or EX.reg_c_wb_sel == WB_SP) and   \
                                                EX.reg_c_rf_wen  else   \
