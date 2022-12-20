@@ -144,7 +144,7 @@ csignals = {
 
 class IF(Pipe):
 
-    # TODO: IF에 branch가 올 경우 predict한 값을 pipe reg로 가지고 있도록 수
+
 
     # Pipeline registers ------------------------------
 
